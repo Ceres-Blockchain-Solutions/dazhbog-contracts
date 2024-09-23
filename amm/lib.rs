@@ -15,7 +15,7 @@ pub use self::amm::{
 
 #[ink::contract]
 mod amm {
-    use ink::{contract_ref, prelude::{vec, vec::Vec}, storage::Mapping};
+    use ink::{contract_ref, prelude::{vec, vec::Vec, string::String, number::Number}, storage::Mapping};
     use psp22::{PSP22Error, PSP22};
     //use psp37::{PSP37Error, PSP37};
 

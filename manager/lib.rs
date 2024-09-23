@@ -2,112 +2,119 @@
 
 pub type TokenId = u128;
 pub type Result<T> = core::result::Result<T, Error>;
+pub type PositionId= u128;
 
 #[derive(Debug, PartialEq, Eq)]
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
-pub enum Error {}
+pub enum Error {
+    Overflow,
+}
 
 #[ink::contract]
 mod manager {
     use super::*;
-    use ink::storage::Mapping;
-    use paymentManager::PaymentManagerRef;
+    use ink::{contract_ref , storage::Mapping};
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
     #[cfg_attr(
         feature = "std",
         derive(ink::storage::traits::StorageLayout)
     )]
-    pub enum Position {
+    pub enum PositionType {
         LONG,
         SHORT,
+    }
+
+    #[ink::scale_derive(Encode, Decode, TypeInfo)]
+    #[cfg_attr(
+        feature = "std",
+        derive(ink::storage::traits::StorageLayout)
+    )]
+    pub struct Position {
+        state: bool,
+        token: TokenId,
+        amount: Balance,
+        position_type: PositionType, 
+        leverage: u32, 
+        entry_price: Balance,
+        creation_time: u128
     }
 
     #[ink(event)]
     pub struct PositionOpened {
         #[ink(topic)]
         from: Option<AccountId>,
-        token_id: TokenId,
+        position_id: PositionId,
         #[ink(topic)]
-        value: Balance,
+        amount: Balance,
     }
 
     #[ink(event)]
     pub struct PositionClosed {
         #[ink(topic)]
         from: Option<AccountId>,
-        token_id: TokenId,      
+        position_id: PositionId,      
     }
 
     #[ink(storage)]
-    //#[derive(Default)]
+    #[derive(Default)]
     pub struct Manager {
-        balances: Mapping<(AccountId, TokenId), Balance>,
-        deposits: Mapping<(AccountId, TokenId), Balance>,
-        positions: Mapping<(AccountId, TokenId), Position>,
-        entry_position_prices: Mapping<(AccountId, TokenId), Balance>,
-        paymentManager: PaymentManagerRef,
-        oracle: AccountId,
-        leverage: u32,
+        positions: Mapping<(AccountId, PositionId), Position>,
+        position_id: PositionId,
     }
 
     impl Manager {
 
         #[ink(constructor, payable)]
-        pub fn new(payment_manager_code_hash: Hash, _oracle: AccountId, _leverage: u32) -> Self {
-            let balances = Mapping::default();
-            let entry_position_prices = Mapping::default();
-            let deposits = Mapping::default();
+        pub fn new() -> Self {   
             let positions = Mapping::default();
-            let leverage = _leverage;
-            let paymentManager: PaymentManagerRef = PaymentManagerRef::new()
-            .code_hash(payment_manager_code_hash)
-            .endowment(0)
-            .salt_bytes([0xDE, 0xAD, 0xBE, 0xEF])
-            .instantiate();
-            let oracle = _oracle;
-            Self { balances, deposits, positions, entry_position_prices, paymentManager, oracle, leverage }
+            let position_id: PositionId = 0;
+            Self { positions, position_id }
         }
 
         #[ink(message)]
-        pub fn open_position(&mut self, token_id: TokenId, value: Balance) -> Result<()> {
+        pub fn open_position(&mut self, token: TokenId, amount: Balance, position_type: PositionType, leverage: u32) -> Result<()> {
             let caller = self.env().caller();
-            self.balances.insert((caller, token_id), &value);
-            self.paymentManager.liquidation();
+            // TODO: fetch from oracle price and time 
+            let entry_price: Balance = 100; // TODO: fetch from oracle
+            let creation_time = 1000; // TODO: fetch from oracle
 
+            let position_id = self.position_id;
+            self.position_id.checked_add(1).ok_or(Error::Overflow)?;
+
+            let new_position: Position= Position {
+                state: true,
+                token,
+                amount,
+                position_type,
+                leverage,
+                entry_price,
+                creation_time,
+            };
+
+            self.positions.insert((caller, position_id), &new_position);
+            
             self.env().emit_event(PositionOpened {
                 from: Some(caller),
-                token_id,
-                value,
+                position_id,
+                amount,
             });
 
             Ok(())
         }
 
         #[ink(message)]
-        pub fn close_position(&mut self, token_id: TokenId) -> Result<()> {
+        pub fn close_position(&mut self, position_id: PositionId) -> Result<()> {
             let caller = self.env().caller();
-            self.balances.remove((caller, token_id));
-            self.paymentManager.withdraw_funds(caller);
+            
+            self.positions.remove((caller, position_id));
 
             self.env().emit_event(PositionClosed {
                 from: Some(caller),
-                token_id,
+                position_id,
             });
 
             Ok(())
-        }
-
-        #[ink(message)]
-        pub fn check_position(&self, user: AccountId, token_id: TokenId) -> Balance {
-            // let spot_price = self.oracle.get_price();
-            let spot_price: u128 = 123;
-            let entry_price = self.entry_position_prices.get((user, token_id)).unwrap();
-            //let position = self.positions.get((user, token_id));
-
-            let liquidation_price = (spot_price.abs_diff(entry_price)).saturating_mul(self.leverage as u128);
-
-            liquidation_price
         }
     }
 }
