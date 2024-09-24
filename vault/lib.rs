@@ -43,17 +43,11 @@ mod vault {
         #[ink(constructor, payable)]
         pub fn new() -> Self {
             let contributors = Mapping::default();
-            Self {
-                contributors,
-            }
+            Self { contributors }
         }
 
         #[ink(message)]
-        pub fn add_liquidity(
-            &mut self,
-            token: TokenId,
-            amount: Balance,
-        ) -> Result<()> {
+        pub fn add_liquidity(&mut self, token: TokenId, amount: Balance) -> Result<()> {
             let caller = self.env().caller();
 
             self.contributors.insert((caller, token), &amount);
@@ -68,11 +62,7 @@ mod vault {
         }
 
         #[ink(message)]
-        pub fn remove_liquidity(
-            &mut self,
-            token: TokenId,
-            amount: Balance,
-        ) -> Result<()> {
+        pub fn remove_liquidity(&mut self, token: TokenId, amount: Balance) -> Result<()> {
             let caller = self.env().caller();
 
             self.contributors.remove((caller, token));
@@ -86,5 +76,36 @@ mod vault {
             Ok(())
         }
 
+        #[ink(message)]
+        pub fn get_contributor_balance(&self, account: AccountId, token: TokenId) -> Balance {
+            self.contributors.get(&(account, token)).unwrap_or_default()
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[ink::test]
+        pub fn add_liquidity_works() {
+            let mut vault = Vault::new();
+            let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
+
+            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.alice);
+            vault.add_liquidity(123, 1);
+            assert_eq!(vault.get_contributor_balance(accounts.alice, 123), 1);
+        }
+
+        #[ink::test]
+        pub fn remove_liquidity_works() {
+            let mut vault = Vault::new();
+            let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
+
+            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.alice);
+            vault.add_liquidity(123, 1);
+
+            vault.remove_liquidity(123, 1);
+            assert_eq!(vault.get_contributor_balance(accounts.alice, 123), 0);
+        }
     }
 }
