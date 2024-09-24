@@ -93,6 +93,10 @@ mod vault {
 
             ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.alice);
             vault.add_liquidity(123, 1);
+
+            let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
+            assert_eq!(emitted_events.len(), 1);
+
             assert_eq!(vault.get_contributor_balance(accounts.alice, 123), 1);
         }
 
@@ -105,6 +109,10 @@ mod vault {
             vault.add_liquidity(123, 1);
 
             vault.remove_liquidity(123, 1);
+
+            let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
+            assert_eq!(emitted_events.len(), 2);
+
             assert_eq!(vault.get_contributor_balance(accounts.alice, 123), 0);
         }
     }
