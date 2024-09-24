@@ -1,9 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
 
-
-pub use self::paymentManager::{
-    PaymentManagerRef,
-};
+pub use self::paymentManager::PaymentManagerRef;
 
 #[ink::contract]
 mod paymentManager {
@@ -20,12 +17,12 @@ mod paymentManager {
         #[ink(constructor)]
         pub fn new(amm_code_hash: Hash) -> Self {
             let amm: ammRef = PaymentManagerRef::new()
-            .code_hash(amm_code_hash)
-            .endowment(0)
-            .salt_bytes([0xDE, 0xAD, 0xBE, 0xEF])
-            .instantiate();
+                .code_hash(amm_code_hash)
+                .endowment(0)
+                .salt_bytes([0xDE, 0xAD, 0xBE, 0xEF])
+                .instantiate();
 
-            Self{amm_pool: amm}
+            Self { amm_pool: amm }
         }
 
         #[ink(message)]
@@ -57,5 +54,4 @@ mod paymentManager {
             //call withdrawFunds on amm
         }
     }
-
 }

@@ -1,95 +1,66 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
 
+pub type TokenId = u128;
+pub type Result<T> = core::result::Result<T, Error>;
+pub type PositionId = u128;
+
+#[derive(Debug, PartialEq, Eq)]
+#[ink::scale_derive(Encode, Decode, TypeInfo)]
+pub enum Error {
+    Overflow,
+}
+
 #[ink::contract]
 mod vault {
     use super::*;
-    use openbrush::traits::Storage;
-    use ink::storage::Mapping;
-    use paymentToken::PaymentTokenRef;
-    use perpToken::PerpTokenRef;
-    use ink::parity_scale_codec::WrapperTypeDecode;
-
+    use ink::{contract_ref, storage::Mapping};
 
     #[ink(event)]
-    pub struct Deposit {
+    pub struct AddLiquidity {
         #[ink(topic)]
-        from: AccountId,
+        from: Option<AccountId>,
+        token: TokenId,
+        #[ink(topic)]
         amount: Balance,
     }
 
     #[ink(event)]
-    pub struct Withdraw {
+    pub struct WithdrawLiquidity {
         #[ink(topic)]
-        from: AccountId,
-        amount: Balance,     
-    }
-
-    #[ink(event)]
-    pub struct WithdrawMarginFee {
+        from: Option<AccountId>,
+        token: TokenId,
         #[ink(topic)]
-        manager: AccountId,
         amount: Balance,
     }
 
     #[ink(storage)]
-    #[derive(WrapperTypeDecode)]
+    #[derive(Default)]
     pub struct Vault {
-        token_in: AccountId,
-        token_out: AccountId,
-        admin: AccountId,
-        paymentToken: PaymentTokenRef,
-        perpToken: PerpTokenRef,
+        contributors: Mapping<(AccountId, TokenId), Balance>,
     }
 
-    pub enum Error {}
-
     impl Vault {
-        #[ink(constructor)]
-        pub fn new(payment_token_code_hash: Hash, initial_supply: Balance, perp_token_code_hash: Hash, _token_in: AccountId, _token_out: AccountId) -> Self {
-            let caller = Self::env().caller();
-
-            let paymentToken: PaymentTokenRef = PaymentTokenRef::new(initial_supply)
-                .code_hash(payment_token_code_hash);
-
-            let perpToken: PerpTokenRef = PerpTokenRef::new()
-                .code_hash(perp_token_code_hash);
-
-            Self { 
-                token_in: _token_in, 
-                token_out: _token_out, 
-                admin: caller,
-                paymentToken: paymentToken,
-                perpToken: perpToken,
+        #[ink(constructor, payable)]
+        pub fn new() -> Self {
+            let contributors = Mapping::default();
+            Self {
+                contributors,
             }
         }
 
         #[ink(message)]
-        pub fn deposit(&mut self, amount: Balance, calculated_amount: Balance, user: AccountId) {
-            let contract = self.env().account_id();
-            let mut token_ref: contract_ref!(PSP22) = self.token_in.into();
+        pub fn add_liquidity(
+            &mut self,
+            token: TokenId,
+            amount: Balance,
+        ) -> Result<()> {
+            let caller = self.env().caller();
 
-            token_ref.transfer_from(user, contract, amount, Vec::new());
+            self.contributors.insert((caller, token), &amount);
 
-            self.token_out.transfer(user, calculated_amount);
-
-            self.env().emit_event(Deposit {
-                from: user,
-                amount,
-            });
-
-            //Ok(())
-        }
-
-        #[ink(message)]
-        pub fn withdraw(&mut self, amount: Balance, calculated_amount: Balance, user: AccountId) -> Result<()> {
-            let contract = self.env().account_id();
-
-            self.token_out.transfer_from(user, contract, calculated_amount);
-
-            self.token_in.transfer(user, amount);
-
-            self.env().emit_event(Withdraw {
-                from: user,
+            self.env().emit_event(AddLiquidity {
+                from: Some(caller),
+                token,
                 amount,
             });
 
@@ -97,15 +68,23 @@ mod vault {
         }
 
         #[ink(message)]
-        pub fn collect_margin_fee(&mut self, amount: Balance, manager: AccountId) -> Result<()> {
-            self.token_in.transfer(manager, amount);
+        pub fn remove_liquidity(
+            &mut self,
+            token: TokenId,
+            amount: Balance,
+        ) -> Result<()> {
+            let caller = self.env().caller();
 
-            self.env().emit_event(WithdrawMarginFee {
-                manager: manager,
+            self.contributors.remove((caller, token));
+
+            self.env().emit_event(WithdrawLiquidity {
+                from: Some(caller),
+                token,
                 amount,
             });
 
             Ok(())
         }
+
     }
 }

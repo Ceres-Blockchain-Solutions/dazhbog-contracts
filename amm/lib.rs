@@ -1,5 +1,3 @@
-
-
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
 /// Simple AMM pool contract
 ///
@@ -8,14 +6,15 @@
 ///
 /// Swaps can be performed between all pairs in the pool whitelisted for trading
 /// Liquidity provisioning is limited to designated accounts only and works as deposits / withdrawals of arbitrary composition.
-pub use self::amm::{
-    AmmPool,
-    AmmPoolRef,
-};
+pub use self::amm::{AmmPool, AmmPoolRef};
 
 #[ink::contract]
 mod amm {
-    use ink::{contract_ref, prelude::{vec, vec::Vec, string::String, number::Number}, storage::Mapping};
+    use ink::{
+        contract_ref,
+        prelude::{number::Number, string::String, vec, vec::Vec},
+        storage::Mapping,
+    };
     use psp22::{PSP22Error, PSP22};
     //use psp37::{PSP37Error, PSP37};
 
@@ -344,9 +343,9 @@ mod amm {
             Self::_out_given_in(amount_token_in, balance_token_in, balance_token_out)
         }
 
-        /// This function is used internally to determine the amount of token needed to swap for a specified amount of another token, 
+        /// This function is used internally to determine the amount of token needed to swap for a specified amount of another token,
         /// considering the current balances of both tokens within the pool.
-        /// 
+        ///
         /// B_i * A_o / (B_o - A_o)
         fn _in_given_out(
             amount_token_out: Balance,
@@ -364,9 +363,9 @@ mod amm {
             op1.checked_div(op2).ok_or(AmmError::Arithmethic)
         }
 
-        /// This function helps estimate the maximum amount of a desired token (`amount_token_out`) a user can receive when swapping 
+        /// This function helps estimate the maximum amount of a desired token (`amount_token_out`) a user can receive when swapping
         /// a specific amount of another token (`amount_token_in`), considering the current pool reserves and potential fee impact.
-        /// 
+        ///
         /// B_o * A_i / (B_i + A_i)
         fn _out_given_in(
             amount_token_in: Balance,
