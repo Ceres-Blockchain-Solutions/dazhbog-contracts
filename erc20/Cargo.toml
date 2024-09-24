@@ -1,6 +1,7 @@
 [package]
 name = "erc20"
 version = "5.0.0"
+authors = ["Rastko Misulic"]
 edition = "2021"
 publish = false
 

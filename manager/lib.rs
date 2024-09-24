@@ -13,7 +13,9 @@ pub enum Error {
 #[ink::contract]
 mod manager {
     use super::*;
-    use ink::{contract_ref, storage::Mapping};
+    use ink::storage::Mapping;
+    use ink::env::DefaultEnvironment;
+    use ink::env::call::{build_call, ExecutionInput, Selector};
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
     #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
@@ -51,20 +53,22 @@ mod manager {
     }
 
     #[ink(storage)]
-    #[derive(Default)]
     pub struct Manager {
         positions: Mapping<(AccountId, PositionId), Position>,
         position_id: PositionId,
+        vault: AccountId,
     }
 
     impl Manager {
         #[ink(constructor, payable)]
-        pub fn new() -> Self {
+        pub fn new(vault_address: AccountId) -> Self {
             let positions = Mapping::default();
             let position_id: PositionId = 0;
+            let vault = vault_address;
             Self {
                 positions,
                 position_id,
+                vault,
             }
         }
 
@@ -96,6 +100,18 @@ mod manager {
 
             self.positions.insert((caller, position_id), &new_position);
 
+            let deposit = build_call::<DefaultEnvironment>()
+                .call(self.vault)
+                .call_v1()
+                .gas_limit(0)
+                .exec_input(
+                    ExecutionInput::new(Selector::new(ink::selector_bytes!("add_liquidity")))
+                        .push_arg(token)
+                        .push_arg(amount)
+                )
+                .returns::<bool>()
+                .invoke();
+
             self.env().emit_event(PositionOpened {
                 from: Some(caller),
                 position_id,
@@ -108,8 +124,23 @@ mod manager {
         #[ink(message)]
         pub fn close_position(&mut self, position_id: PositionId) -> Result<()> {
             let caller = self.env().caller();
+            
+            let amount = self.positions.get((caller, position_id)).unwrap().amount;
+            let token = self.positions.get((caller, position_id)).unwrap().token;
 
             self.positions.remove((caller, position_id));
+
+            let deposit = build_call::<DefaultEnvironment>()
+            .call(self.vault)
+            .call_v1()
+            .gas_limit(0)
+            .exec_input(
+                ExecutionInput::new(Selector::new(ink::selector_bytes!("remove_liquidity")))
+                    .push_arg(token)
+                    .push_arg(amount)
+            )
+            .returns::<bool>()
+            .invoke();
 
             self.env().emit_event(PositionClosed {
                 from: Some(caller),

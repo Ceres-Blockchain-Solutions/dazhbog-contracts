@@ -14,6 +14,8 @@ pub enum Error {
 mod vault {
     use super::*;
     use ink::{contract_ref, storage::Mapping};
+    use ink::env::DefaultEnvironment;
+    use ink::env::call::{build_call, ExecutionInput, Selector};
 
     #[ink(event)]
     pub struct AddLiquidity {
@@ -34,16 +36,18 @@ mod vault {
     }
 
     #[ink(storage)]
-    #[derive(Default)]
+    // #[derive(Default)]
     pub struct Vault {
         contributors: Mapping<(AccountId, TokenId), Balance>,
+        erc20contract: AccountId,
     }
 
     impl Vault {
-        #[ink(constructor, payable)]
-        pub fn new() -> Self {
+        #[ink(constructor)]
+        pub fn new(erc20_contract_address: AccountId) -> Self {
             let contributors = Mapping::default();
-            Self { contributors }
+            let erc20contract = erc20_contract_address;
+            Self { contributors, erc20contract }
         }
 
         #[ink(message)]
@@ -51,6 +55,18 @@ mod vault {
             let caller = self.env().caller();
 
             self.contributors.insert((caller, token), &amount);
+
+            let deposit = build_call::<DefaultEnvironment>()
+                .call(self.erc20contract)
+                .call_v1()
+                .gas_limit(0)
+                .exec_input(
+                    ExecutionInput::new(Selector::new(ink::selector_bytes!("transfer")))
+                        .push_arg(Self::env().account_id())
+                        .push_arg(amount)
+                )
+                .returns::<bool>()
+                .invoke();
 
             self.env().emit_event(AddLiquidity {
                 from: Some(caller),
