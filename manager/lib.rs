@@ -8,16 +8,18 @@ pub type PositionId = u128;
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
 pub enum Error {
     Overflow,
+    NotFound,
 }
 
 #[ink::contract]
 mod manager {
     use super::*;
-    use ink::storage::Mapping;
-    use ink::env::DefaultEnvironment;
     use ink::env::call::{build_call, ExecutionInput, Selector};
+    use ink::env::DefaultEnvironment;
+    use ink::storage::Mapping;
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
+    #[derive(Debug, PartialEq, Eq)]
     #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
     pub enum PositionType {
         LONG,
@@ -25,6 +27,7 @@ mod manager {
     }
 
     #[ink::scale_derive(Encode, Decode, TypeInfo)]
+    #[derive(Debug, PartialEq, Eq)]
     #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
     pub struct Position {
         state: bool,
@@ -100,17 +103,17 @@ mod manager {
 
             self.positions.insert((caller, position_id), &new_position);
 
-            let deposit = build_call::<DefaultEnvironment>()
-                .call(self.vault)
-                .call_v1()
-                .gas_limit(0)
-                .exec_input(
-                    ExecutionInput::new(Selector::new(ink::selector_bytes!("add_liquidity")))
-                        .push_arg(token)
-                        .push_arg(amount)
-                )
-                .returns::<bool>()
-                .invoke();
+            // let deposit = build_call::<DefaultEnvironment>()
+            //     .call(self.vault)
+            //     .call_v1()
+            //     .gas_limit(0)
+            //     .exec_input(
+            //         ExecutionInput::new(Selector::new(ink::selector_bytes!("add_liquidity")))
+            //             .push_arg(token)
+            //             .push_arg(amount)
+            //     )
+            //     .returns::<bool>()
+            //     .invoke();
 
             self.env().emit_event(PositionOpened {
                 from: Some(caller),
@@ -124,23 +127,23 @@ mod manager {
         #[ink(message)]
         pub fn close_position(&mut self, position_id: PositionId) -> Result<()> {
             let caller = self.env().caller();
-            
+
             let amount = self.positions.get((caller, position_id)).unwrap().amount;
             let token = self.positions.get((caller, position_id)).unwrap().token;
 
             self.positions.remove((caller, position_id));
 
-            let deposit = build_call::<DefaultEnvironment>()
-            .call(self.vault)
-            .call_v1()
-            .gas_limit(0)
-            .exec_input(
-                ExecutionInput::new(Selector::new(ink::selector_bytes!("remove_liquidity")))
-                    .push_arg(token)
-                    .push_arg(amount)
-            )
-            .returns::<bool>()
-            .invoke();
+            // let withdraw = build_call::<DefaultEnvironment>()
+            // .call(self.vault)
+            // .call_v1()
+            // .gas_limit(0)
+            // .exec_input(
+            //     ExecutionInput::new(Selector::new(ink::selector_bytes!("remove_liquidity")))
+            //         .push_arg(token)
+            //         .push_arg(amount)
+            // )
+            // .returns::<bool>()
+            // .invoke();
 
             self.env().emit_event(PositionClosed {
                 from: Some(caller),
@@ -148,6 +151,76 @@ mod manager {
             });
 
             Ok(())
+        }
+
+        #[ink(message)]
+        pub fn get_position(
+            &self,
+            account: AccountId,
+            position_id: PositionId,
+        ) -> Result<Position> {
+            let temp = self.positions.get((account, position_id));
+
+            if temp.is_some() {
+                Ok(temp.unwrap())
+            } else {
+                Err(Error::NotFound)
+            }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[ink::test]
+        pub fn open_position_works() {
+            let mut manager = Manager::new(AccountId::from([0x42; 32]));
+            let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
+
+            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.alice);
+
+            assert_eq!(
+                manager.open_position(123, 1, PositionType::LONG, 10),
+                Ok(())
+            );
+
+            let position = manager.get_position(accounts.alice, 0).unwrap();
+
+            assert_eq!(position.token, 123);
+            assert_eq!(position.amount, 1);
+            assert_eq!(position.leverage, 10);
+
+            let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
+            assert_eq!(emitted_events.len(), 1);
+        }
+
+        #[ink::test]
+        pub fn close_position_works() {
+            let token = 1;
+            let position_id = 0;
+            let mut manager = Manager::new(AccountId::from([0x42; 32]));
+            let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
+
+            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.alice);
+            let res = manager.open_position(123, token, PositionType::LONG, 10);
+
+            let res = manager.close_position(position_id);
+
+            let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
+            assert_eq!(emitted_events.len(), 2);
+
+            let position = manager.get_position(accounts.alice, 0);
+
+            assert_eq!(position.unwrap_err(), Error::NotFound);
+        }
+
+        #[ink::test]
+        pub fn contract_creation_works() {
+            let mut manager = Manager::new(AccountId::from([0x42; 32]));
+
+            assert_eq!(manager.position_id, 0);
+            assert_eq!(manager.vault, AccountId::from([0x42; 32]));
         }
     }
 }

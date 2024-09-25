@@ -13,6 +13,7 @@ scale-info = { version = "2.3", default-features = false, features = ["derive"],
 
 # Brush dependency
 openbrush = { git = "https://github.com/Brushfam/openbrush-contracts", branch = "develop", default-features = false }
+drink = "0.17.0"
 
 
 [dev-dependencies]
