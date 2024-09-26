@@ -83,6 +83,19 @@ mod vault {
 
             self.contributors.remove((caller, token));
 
+            let deposit = build_call::<DefaultEnvironment>()
+                .call(self.erc20contract)
+                .call_v1()
+                .gas_limit(0)
+                .exec_input(
+                    ExecutionInput::new(Selector::new(ink::selector_bytes!("transfer_from")))
+                        .push_arg(self.env().caller())
+                        .push_arg(Self::env().account_id())
+                        .push_arg(amount)
+                )
+                .returns::<bool>()
+                .invoke();
+
             self.env().emit_event(WithdrawLiquidity {
                 from: Some(caller),
                 token,

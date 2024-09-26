@@ -6,10 +6,7 @@ edition = "2021"
 
 [dependencies]
 ink = { version = "5.0.0", default-features = false }
-paymentToken = { path = "../paymentToken", default-features = false, features = ["ink-as-dependency"] }
 erc20 = { path = "../erc20", default-features = false, features = ["ink-as-dependency"] }
-dazhbog = { path = "..", default-features = false }
-perpToken = { path = "../perpToken", default-features = false}
 
 
 [dev-dependencies]
@@ -22,8 +19,6 @@ path = "lib.rs"
 default = ["std"]
 std = [
     "ink/std",
-    "paymentToken/std",
-    "perpToken/std",
     "erc20/std",
 ]
 ink-as-dependency = []
