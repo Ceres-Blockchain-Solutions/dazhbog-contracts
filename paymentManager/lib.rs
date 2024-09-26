@@ -12,19 +12,31 @@ mod paymentManager {
 
     #[ink(storage)]
     pub struct PaymentManager {
-        temp: Balance,
+        vault: AccountId,
     }
 
     impl PaymentManager {
         #[ink(constructor)]
-        pub fn new() -> Self {
-            let temp = 0;
-            Self { temp }
+        pub fn new(vault_address: AccountId) -> Self {
+            let vault = vault_address;
+            Self { vault }
         }
 
         #[ink(message)]
         pub fn liquidation(&mut self) {
             //close user position in manager contract
+            // // transfer fees to vault
+            // let send_fee_to_vault = build_call::<DefaultEnvironment>()
+            //     .call(self.erc20)
+            //     .call_v1()
+            //     .gas_limit(0)
+            //     .exec_input(
+            //         ExecutionInput::new(Selector::new(ink::selector_bytes!("transfer")))
+            //             .push_arg(self.vault)
+            //             .push_arg(self.fee),
+            //     )
+            //     .returns::<bool>()
+            //     .invoke();
             //update user balance
         }
 
@@ -36,6 +48,20 @@ mod paymentManager {
             //calls collect fee
             //update position in manager contract
             //update vault
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[ink::test]
+        pub fn contract_creation_works() {
+            let vault = AccountId::from([0x1; 32]);
+
+            let mut paymentManager = PaymentManager::new(vault);
+
+            assert_eq!(paymentManager.vault, vault);
         }
     }
 }
