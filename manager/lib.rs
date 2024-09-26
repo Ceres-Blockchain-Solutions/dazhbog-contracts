@@ -238,7 +238,23 @@ mod manager {
 
         #[ink(message)]
         pub fn calculate_funding_rate(&self) -> Result<Balance> {
-            
+            let spot_price: Balance = 100; // TODO: fetch from oracle
+            let contract_price: Balance = 100; // TODO: fetch from oracle
+            let long_short_sub = contract_price.checked_sub(spot_price).ok_or(Error::Underflow)?;
+            let ff = long_short_sub.checked_div(spot_price).ok_or(Error::Underflow)?;
+            let mut oii = 0;
+
+            if self.long_total > self.short_total {
+                oii = self.long_total.checked_sub(self.short_total).ok_or(Error::Underflow)?;
+            } else {
+                oii = self.short_total.checked_sub(self.long_total).ok_or(Error::Underflow)?;
+            }
+
+            let toi = self.long_total.checked_add(self.short_total).ok_or(Error::Underflow)?;
+
+            let funding_rate = ff.wrapping_mul(oii).checked_div(toi).ok_or(Error::Underflow)?;
+
+            Ok(funding_rate)
         } 
     }
 
