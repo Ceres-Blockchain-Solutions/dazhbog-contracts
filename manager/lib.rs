@@ -63,6 +63,8 @@ mod manager {
         vault: AccountId,
         fee: Balance,
         erc20: AccountId,
+        long_count: Balance,
+        short_count: Balance,
     }
 
     impl Manager {
@@ -70,6 +72,8 @@ mod manager {
         pub fn new(vault_address: AccountId, fee: Balance, erc20: AccountId) -> Self {
             let positions = Mapping::default();
             let position_id: PositionId = 0;
+            let long_count = 0;
+            let short_count = 0;
             let vault = vault_address;
             Self {
                 positions,
@@ -77,6 +81,8 @@ mod manager {
                 vault,
                 fee,
                 erc20,
+                long_count,
+                short_count,
             }
         }
 
@@ -95,6 +101,15 @@ mod manager {
 
             let position_id = self.position_id;
             self.position_id.checked_add(1).ok_or(Error::Overflow)?;
+
+            match position_type {
+                PositionType::LONG => {
+                    self.long_count = self.long_count.wrapping_add(1);
+                },
+                PositionType::SHORT => {
+                    self.short_count = self.short_count.wrapping_add(1);
+                },
+            }
 
             // // transfer fees to vault
             // let send_fee_to_vault = build_call::<DefaultEnvironment>()
@@ -162,6 +177,15 @@ mod manager {
             //     )
             //     .returns::<bool>()
             //     .invoke();
+
+            match self.positions.get((caller, position_id)).unwrap().position_type {
+                PositionType::LONG => {
+                    self.long_count = self.long_count.checked_sub(1).unwrap();
+                },
+                PositionType::SHORT => {
+                    self.short_count = self.short_count.checked_sub(1).unwrap();
+                },
+            }
 
             self.positions.remove((caller, position_id));
 
@@ -267,9 +291,13 @@ mod manager {
             let fee = 10;
             let erc20 = AccountId::from([0x0; 32]);
             let vault = AccountId::from([0x1; 32]);
+            let long_count = 0;
+            let short_count = 0;
             let mut manager = Manager::new(vault, fee, erc20);
 
             assert_eq!(manager.position_id, position_id);
+            assert_eq!(manager.long_count, long_count);
+            assert_eq!(manager.short_count, short_count);
             assert_eq!(manager.vault, vault);
         }
     }
