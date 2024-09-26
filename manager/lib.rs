@@ -63,8 +63,8 @@ mod manager {
         vault: AccountId,
         fee: Balance,
         erc20: AccountId,
-        long_count: Balance,
-        short_count: Balance,
+        long_total: Balance,
+        short_total: Balance,
     }
 
     impl Manager {
@@ -72,8 +72,8 @@ mod manager {
         pub fn new(vault_address: AccountId, fee: Balance, erc20: AccountId) -> Self {
             let positions = Mapping::default();
             let position_id: PositionId = 0;
-            let long_count = 0;
-            let short_count = 0;
+            let long_total = 0;
+            let short_total = 0;
             let vault = vault_address;
             Self {
                 positions,
@@ -81,8 +81,8 @@ mod manager {
                 vault,
                 fee,
                 erc20,
-                long_count,
-                short_count,
+                long_total,
+                short_total,
             }
         }
 
@@ -104,10 +104,10 @@ mod manager {
 
             match position_type {
                 PositionType::LONG => {
-                    self.long_count = self.long_count.wrapping_add(1);
+                    self.long_total = self.long_total.wrapping_add(entry_price.wrapping_mul(amount));
                 },
                 PositionType::SHORT => {
-                    self.short_count = self.short_count.wrapping_add(1);
+                    self.short_total = self.short_total.wrapping_add(entry_price.wrapping_mul(amount));
                 },
             }
 
@@ -180,10 +180,10 @@ mod manager {
 
             match self.positions.get((caller, position_id)).unwrap().position_type {
                 PositionType::LONG => {
-                    self.long_count = self.long_count.checked_sub(1).unwrap();
+                    self.long_total = self.long_total.checked_sub(1).unwrap();
                 },
                 PositionType::SHORT => {
-                    self.short_count = self.short_count.checked_sub(1).unwrap();
+                    self.short_total = self.short_total.checked_sub(1).unwrap();
                 },
             }
 
@@ -225,6 +225,21 @@ mod manager {
                 Err(Error::NotFound)
             }
         }
+
+        #[ink(message)]
+        pub fn get_number_longs(&self) -> Result<Balance> {
+            Ok(self.long_total)
+        } 
+
+        #[ink(message)]
+        pub fn get_number_shorts(&self) -> Result<Balance> {
+            Ok(self.short_total)
+        } 
+
+        #[ink(message)]
+        pub fn calculate_funding_rate(&self) -> Result<Balance> {
+            
+        } 
     }
 
     #[cfg(test)]
@@ -291,13 +306,13 @@ mod manager {
             let fee = 10;
             let erc20 = AccountId::from([0x0; 32]);
             let vault = AccountId::from([0x1; 32]);
-            let long_count = 0;
-            let short_count = 0;
+            let long_total = 0;
+            let short_total = 0;
             let mut manager = Manager::new(vault, fee, erc20);
 
             assert_eq!(manager.position_id, position_id);
-            assert_eq!(manager.long_count, long_count);
-            assert_eq!(manager.short_count, short_count);
+            assert_eq!(manager.long_total, long_total);
+            assert_eq!(manager.short_total, short_total);
             assert_eq!(manager.vault, vault);
         }
     }
