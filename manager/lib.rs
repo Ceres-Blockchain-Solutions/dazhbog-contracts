@@ -149,7 +149,6 @@ mod manager {
             let caller = self.env().caller();
 
             let amount = self.positions.get((caller, position_id)).unwrap().amount;
-            let token = self.positions.get((caller, position_id)).unwrap().token;
 
             // // transfer fees to vault
             // let send_fee_to_vault = build_call::<DefaultEnvironment>()
