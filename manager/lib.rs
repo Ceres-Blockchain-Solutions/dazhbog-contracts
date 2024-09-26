@@ -91,24 +91,24 @@ mod manager {
             let caller = self.env().caller();
             // TODO: fetch from oracle price
             let entry_price: Balance = 100; // TODO: fetch from oracle
-            let creation_time = self.env().block_timestamp().into(); 
+            let creation_time = self.env().block_timestamp().into();
 
             let position_id = self.position_id;
             self.position_id.checked_add(1).ok_or(Error::Overflow)?;
 
-            // transfer fees to vault
-            let send_fee_to_vault = build_call::<DefaultEnvironment>()
-                .call(self.erc20)
-                .call_v1()
-                .gas_limit(0)
-                .exec_input(
-                    ExecutionInput::new(Selector::new(ink::selector_bytes!("transfer")))
-                        .push_arg(self.vault)
-                        .push_arg(self.fee)
-                )
-                .returns::<bool>()
-                .invoke();
-            
+            // // transfer fees to vault
+            // let send_fee_to_vault = build_call::<DefaultEnvironment>()
+            //     .call(self.erc20)
+            //     .call_v1()
+            //     .gas_limit(0)
+            //     .exec_input(
+            //         ExecutionInput::new(Selector::new(ink::selector_bytes!("transfer")))
+            //             .push_arg(self.vault)
+            //             .push_arg(self.fee),
+            //     )
+            //     .returns::<bool>()
+            //     .invoke();
+
             let updated_amount = amount.checked_sub(self.fee).ok_or(Error::Underflow)?;
 
             let new_position: Position = Position {
@@ -123,17 +123,17 @@ mod manager {
 
             self.positions.insert((caller, position_id), &new_position);
 
-            let deposit = build_call::<DefaultEnvironment>()
-                .call(self.vault)
-                .call_v1()
-                .gas_limit(0)
-                .exec_input(
-                    ExecutionInput::new(Selector::new(ink::selector_bytes!("add_liquidity")))
-                        .push_arg(token)
-                        .push_arg(updated_amount)
-                )
-                .returns::<bool>()
-                .invoke();
+            // let deposit = build_call::<DefaultEnvironment>()
+            //     .call(self.vault)
+            //     .call_v1()
+            //     .gas_limit(0)
+            //     .exec_input(
+            //         ExecutionInput::new(Selector::new(ink::selector_bytes!("add_liquidity")))
+            //             .push_arg(token)
+            //             .push_arg(updated_amount),
+            //     )
+            //     .returns::<bool>()
+            //     .invoke();
 
             self.env().emit_event(PositionOpened {
                 from: Some(caller),
@@ -151,34 +151,34 @@ mod manager {
             let amount = self.positions.get((caller, position_id)).unwrap().amount;
             let token = self.positions.get((caller, position_id)).unwrap().token;
 
-            // transfer fees to vault
-            let send_fee_to_vault = build_call::<DefaultEnvironment>()
-                .call(self.erc20)
-                .call_v1()
-                .gas_limit(0)
-                .exec_input(
-                    ExecutionInput::new(Selector::new(ink::selector_bytes!("transfer")))
-                        .push_arg(self.vault)
-                        .push_arg(self.fee)
-                )
-                .returns::<bool>()
-                .invoke();
+            // // transfer fees to vault
+            // let send_fee_to_vault = build_call::<DefaultEnvironment>()
+            //     .call(self.erc20)
+            //     .call_v1()
+            //     .gas_limit(0)
+            //     .exec_input(
+            //         ExecutionInput::new(Selector::new(ink::selector_bytes!("transfer")))
+            //             .push_arg(self.vault)
+            //             .push_arg(self.fee),
+            //     )
+            //     .returns::<bool>()
+            //     .invoke();
 
             self.positions.remove((caller, position_id));
 
             let updated_amount = amount.checked_sub(self.fee).ok_or(Error::Underflow)?;
 
-            let withdraw = build_call::<DefaultEnvironment>()
-            .call(self.vault)
-            .call_v1()
-            .gas_limit(0)
-            .exec_input(
-                ExecutionInput::new(Selector::new(ink::selector_bytes!("remove_liquidity")))
-                    .push_arg(token)
-                    .push_arg(updated_amount)
-            )
-            .returns::<bool>()
-            .invoke();
+            // let withdraw = build_call::<DefaultEnvironment>()
+            //     .call(self.vault)
+            //     .call_v1()
+            //     .gas_limit(0)
+            //     .exec_input(
+            //         ExecutionInput::new(Selector::new(ink::selector_bytes!("remove_liquidity")))
+            //             .push_arg(token)
+            //             .push_arg(updated_amount),
+            //     )
+            //     .returns::<bool>()
+            //     .invoke();
 
             self.env().emit_event(PositionClosed {
                 from: Some(caller),
@@ -212,9 +212,12 @@ mod manager {
         pub fn open_position_works() {
             let token = 1;
             let position_id = 0;
-            let amount = 1; 
+            let amount = 100;
             let leverage = 10;
-            let mut manager = Manager::new(AccountId::from([0x42; 32]));
+            let fee = 10;
+            let erc20 = AccountId::from([0x0; 32]);
+            let vault = AccountId::from([0x1; 32]);
+            let mut manager = Manager::new(vault, fee, erc20);
             let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
 
             ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.alice);
@@ -227,7 +230,7 @@ mod manager {
             let position = manager.get_position(accounts.alice, position_id).unwrap();
 
             assert_eq!(position.token, token);
-            assert_eq!(position.amount, amount);
+            assert_eq!(position.amount, amount - fee);
             assert_eq!(position.leverage, leverage);
 
             let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
@@ -238,9 +241,12 @@ mod manager {
         pub fn close_position_works() {
             let token = 1;
             let position_id = 0;
-            let amount = 1;
+            let amount = 100;
             let leverage = 10;
-            let mut manager = Manager::new(AccountId::from([0x42; 32]));
+            let fee = 10;
+            let erc20 = AccountId::from([0x0; 32]);
+            let vault = AccountId::from([0x1; 32]);
+            let mut manager = Manager::new(vault, fee, erc20);
             let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
 
             ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.alice);
@@ -259,11 +265,13 @@ mod manager {
         #[ink::test]
         pub fn contract_creation_works() {
             let position_id = 0;
-            let erc20address = AccountId::from([0x42; 32]);
-            let mut manager = Manager::new(AccountId::from([0x42; 32]));
+            let fee = 10;
+            let erc20 = AccountId::from([0x0; 32]);
+            let vault = AccountId::from([0x1; 32]);
+            let mut manager = Manager::new(vault, fee, erc20);
 
             assert_eq!(manager.position_id, position_id);
-            assert_eq!(manager.vault, erc20address);
+            assert_eq!(manager.vault, vault);
         }
     }
 }

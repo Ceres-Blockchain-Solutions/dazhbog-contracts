@@ -13,9 +13,9 @@ pub enum Error {
 #[ink::contract]
 mod vault {
     use super::*;
-    use ink::{contract_ref, storage::Mapping};
-    use ink::env::DefaultEnvironment;
     use ink::env::call::{build_call, ExecutionInput, Selector};
+    use ink::env::DefaultEnvironment;
+    use ink::{contract_ref, storage::Mapping};
 
     #[ink(event)]
     pub struct AddLiquidity {
@@ -47,7 +47,10 @@ mod vault {
         pub fn new(erc20_contract_address: AccountId) -> Self {
             let contributors = Mapping::default();
             let erc20contract = erc20_contract_address;
-            Self { contributors, erc20contract }
+            Self {
+                contributors,
+                erc20contract,
+            }
         }
 
         #[ink(message)]
@@ -56,17 +59,17 @@ mod vault {
 
             self.contributors.insert((caller, token), &amount);
 
-            let deposit = build_call::<DefaultEnvironment>()
-                .call(self.erc20contract)
-                .call_v1()
-                .gas_limit(0)
-                .exec_input(
-                    ExecutionInput::new(Selector::new(ink::selector_bytes!("transfer")))
-                        .push_arg(Self::env().account_id())
-                        .push_arg(amount)
-                )
-                .returns::<bool>()
-                .invoke();
+            // let deposit = build_call::<DefaultEnvironment>()
+            //     .call(self.erc20contract)
+            //     .call_v1()
+            //     .gas_limit(0)
+            //     .exec_input(
+            //         ExecutionInput::new(Selector::new(ink::selector_bytes!("transfer")))
+            //             .push_arg(Self::env().account_id())
+            //             .push_arg(amount),
+            //     )
+            //     .returns::<bool>()
+            //     .invoke();
 
             self.env().emit_event(AddLiquidity {
                 from: Some(caller),
@@ -83,18 +86,18 @@ mod vault {
 
             self.contributors.remove((caller, token));
 
-            let deposit = build_call::<DefaultEnvironment>()
-                .call(self.erc20contract)
-                .call_v1()
-                .gas_limit(0)
-                .exec_input(
-                    ExecutionInput::new(Selector::new(ink::selector_bytes!("transfer_from")))
-                        .push_arg(self.env().caller())
-                        .push_arg(Self::env().account_id())
-                        .push_arg(amount)
-                )
-                .returns::<bool>()
-                .invoke();
+            // let deposit = build_call::<DefaultEnvironment>()
+            //     .call(self.erc20contract)
+            //     .call_v1()
+            //     .gas_limit(0)
+            //     .exec_input(
+            //         ExecutionInput::new(Selector::new(ink::selector_bytes!("transfer_from")))
+            //             .push_arg(self.env().caller())
+            //             .push_arg(Self::env().account_id())
+            //             .push_arg(amount),
+            //     )
+            //     .returns::<bool>()
+            //     .invoke();
 
             self.env().emit_event(WithdrawLiquidity {
                 from: Some(caller),
@@ -117,7 +120,8 @@ mod vault {
 
         #[ink::test]
         pub fn add_liquidity_works() {
-            let mut vault = Vault::new();
+            let erc20 = AccountId::from([0x0; 32]);
+            let mut vault = Vault::new(erc20);
             let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
 
             ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.alice);
@@ -131,7 +135,8 @@ mod vault {
 
         #[ink::test]
         pub fn remove_liquidity_works() {
-            let mut vault = Vault::new();
+            let erc20 = AccountId::from([0x0; 32]);
+            let mut vault = Vault::new(erc20);
             let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
 
             ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.alice);
@@ -143,6 +148,14 @@ mod vault {
             assert_eq!(emitted_events.len(), 2);
 
             assert_eq!(vault.get_contributor_balance(accounts.alice, 123), 0);
+        }
+
+        #[ink::test]
+        pub fn contract_creation_works() {
+            let erc20 = AccountId::from([0x0; 32]);
+            let mut vault = Vault::new(erc20);
+
+            assert_eq!(vault.erc20contract, erc20);
         }
     }
 }

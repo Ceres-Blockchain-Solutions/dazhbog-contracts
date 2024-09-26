@@ -1,6 +1,5 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
 
-
 #[ink::contract]
 mod erc20 {
     use ink::storage::Mapping;
@@ -112,7 +111,7 @@ mod erc20 {
             let caller = self.env().caller();
             let allowance = self.allowance_impl(&from, &caller);
             if allowance < value {
-                return Err(Error::InsufficientAllowance)
+                return Err(Error::InsufficientAllowance);
             }
             self.transfer_from_to(&from, &to, value)?;
             // We checked that allowance >= value
@@ -130,7 +129,7 @@ mod erc20 {
         ) -> Result<()> {
             let from_balance = self.balance_of_impl(from);
             if from_balance < value {
-                return Err(Error::InsufficientBalance)
+                return Err(Error::InsufficientBalance);
             }
             // We checked that from_balance >= value
             #[allow(clippy::arithmetic_side_effects)]
@@ -151,10 +150,7 @@ mod erc20 {
     mod tests {
         use super::*;
 
-        use ink::primitives::{
-            Clear,
-            Hash,
-        };
+        use ink::primitives::{Clear, Hash};
 
         fn assert_transfer_event(
             event: &ink::env::test::EmittedEvent,
@@ -162,9 +158,8 @@ mod erc20 {
             expected_to: Option<AccountId>,
             expected_value: Balance,
         ) {
-            let decoded_event =
-                <Transfer as ink::scale::Decode>::decode(&mut &event.data[..])
-                    .expect("encountered invalid contract event data buffer");
+            let decoded_event = <Transfer as ink::scale::Decode>::decode(&mut &event.data[..])
+                .expect("encountered invalid contract event data buffer");
             let Transfer { from, to, value } = decoded_event;
             assert_eq!(from, expected_from, "encountered invalid Transfer.from");
             assert_eq!(to, expected_to, "encountered invalid Transfer.to");
@@ -172,8 +167,7 @@ mod erc20 {
 
             let mut expected_topics = Vec::new();
             expected_topics.push(
-                ink::blake2x256!("Transfer(Option<AccountId>,Option<AccountId>,Balance)")
-                    .into(),
+                ink::blake2x256!("Transfer(Option<AccountId>,Option<AccountId>,Balance)").into(),
             );
             if let Some(from) = expected_from {
                 expected_topics.push(encoded_into_hash(from));
@@ -250,8 +244,7 @@ mod erc20 {
                 Some(AccountId::from([0x01; 32])),
                 100,
             );
-            let accounts =
-                ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
+            let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
             // Alice owns all the tokens on contract instantiation
             assert_eq!(erc20.balance_of(accounts.alice), 100);
             // Bob does not owns tokens
@@ -263,8 +256,7 @@ mod erc20 {
             // Constructor works.
             let mut erc20 = Erc20::new(100);
             // Transfer event triggered during initial construction.
-            let accounts =
-                ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
+            let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
 
             assert_eq!(erc20.balance_of(accounts.bob), 0);
             // Alice transfers 10 tokens to Bob.
@@ -294,8 +286,7 @@ mod erc20 {
         fn invalid_transfer_should_fail() {
             // Constructor works.
             let mut erc20 = Erc20::new(100);
-            let accounts =
-                ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
+            let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
 
             assert_eq!(erc20.balance_of(accounts.bob), 0);
 
@@ -330,8 +321,7 @@ mod erc20 {
             // Constructor works.
             let mut erc20 = Erc20::new(100);
             // Transfer event triggered during initial construction.
-            let accounts =
-                ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
+            let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
 
             // Bob fails to transfer tokens owned by Alice.
             assert_eq!(
@@ -379,8 +369,7 @@ mod erc20 {
         #[ink::test]
         fn allowance_must_not_change_on_failed_transfer() {
             let mut erc20 = Erc20::new(100);
-            let accounts =
-                ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
+            let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
 
             // Alice approves Bob for token transfers on her behalf.
             let alice_balance = erc20.balance_of(accounts.alice);
@@ -415,11 +404,7 @@ mod erc20 {
             T: ink::scale::Encode,
         {
             use ink::{
-                env::hash::{
-                    Blake2x256,
-                    CryptoHash,
-                    HashOutput,
-                },
+                env::hash::{Blake2x256, CryptoHash, HashOutput},
                 primitives::Clear,
             };
 
@@ -429,10 +414,9 @@ mod erc20 {
             let len_encoded = encoded.len();
             if len_encoded <= len_result {
                 result.as_mut()[..len_encoded].copy_from_slice(&encoded);
-                return result
+                return result;
             }
-            let mut hash_output =
-                <<Blake2x256 as HashOutput>::Type as Default>::default();
+            let mut hash_output = <<Blake2x256 as HashOutput>::Type as Default>::default();
             <Blake2x256 as CryptoHash>::hash(&encoded, &mut hash_output);
             let copy_len = core::cmp::min(hash_output.len(), len_result);
             result.as_mut()[0..copy_len].copy_from_slice(&hash_output[0..copy_len]);

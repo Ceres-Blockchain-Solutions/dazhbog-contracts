@@ -12,7 +12,7 @@ mod paymentManager {
 
     #[ink(storage)]
     pub struct PaymentManager {
-        temp: Balance,        
+        temp: Balance,
     }
 
     impl PaymentManager {
@@ -25,19 +25,17 @@ mod paymentManager {
         #[ink(message)]
         pub fn liquidation(&mut self) {
             //close user position in manager contract
-            //update user balance 
+            //update user balance
         }
 
         #[ink(message)]
-        pub fn collect_fee(&self, user: AccountId) {
-            
-        }
+        pub fn collect_fee(&self, user: AccountId) {}
 
         #[ink(message)]
         pub fn update_position(&self, user: AccountId) {
             //calls collect fee
             //update position in manager contract
-            //update vault 
+            //update vault
         }
     }
 }
