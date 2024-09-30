@@ -24,6 +24,13 @@ mod paymentManager {
         fee: Balance,
     }
 
+    #[ink(event)]
+    pub struct PositionUpdated {
+        #[ink(topic)]
+        from: Option<AccountId>,
+        position_id: PositionId,
+    }
+
     #[ink(storage)]
     pub struct PaymentManager {
         vault: AccountId,
@@ -83,10 +90,16 @@ mod paymentManager {
         }
 
         #[ink(message)]
-        pub fn update_position(&self, user: AccountId) {
+        pub fn update_position(&self, position_id: PositionId,user: AccountId) {
             //calls collect fee
+            self.collect_fee(position_id, user);
             //update position in manager contract
             //update vault
+
+            self.env().emit_event(PositionUpdated {
+                from: Some(user),
+                position_id
+            });
         }
     }
 
@@ -116,6 +129,22 @@ mod paymentManager {
             ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.alice);
 
             paymentManager.collect_fee(position_id, accounts.alice);
+
+            let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
+            assert_eq!(emitted_events.len(), 1);
+        }
+
+        #[ink::test]
+        pub fn update_position_works() {
+            let vault_address = AccountId::from([0x1; 32]);
+            let manager_address = AccountId::from([0x1; 32]);
+            let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
+            let position_id = 0;
+
+            let mut paymentManager = PaymentManager::new(vault_address, manager_address);
+            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.alice);
+
+            paymentManager.update_position(position_id, accounts.alice);
 
             let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
             assert_eq!(emitted_events.len(), 1);
