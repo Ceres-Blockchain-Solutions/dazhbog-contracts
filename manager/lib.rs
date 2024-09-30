@@ -76,7 +76,7 @@ mod manager {
     }
 
     impl Manager {
-        #[ink(constructor, payable)]
+        #[ink(constructor)]
         pub fn new(vault_address: AccountId, fee: Balance, erc20: AccountId) -> Self {
             let positions = Mapping::default();
             let position_id: PositionId = 0;
@@ -172,9 +172,9 @@ mod manager {
             &mut self,
             fee: Balance,
             position_id: PositionId,
+            user: AccountId,
         ) -> Result<()> {
-            let caller = self.env().caller();
-            let position = self.positions.get((caller, position_id)).unwrap();
+            let position = self.positions.get((user, position_id)).unwrap();
             let amount = position.amount;
 
             let updated_amount = amount.checked_sub(fee).ok_or(Error::Underflow)?;
@@ -189,7 +189,7 @@ mod manager {
                 creation_time: position.creation_time,
             };
 
-            self.positions.insert((caller, position_id), &new_position);
+            self.positions.insert((user, position_id), &new_position);
 
             // let collect_fee = build_call::<DefaultEnvironment>()
             //     .call(self.vault)
@@ -204,7 +204,7 @@ mod manager {
             //     .invoke();
 
             self.env().emit_event(PositionUpdated {
-                from: Some(caller),
+                from: Some(user),
                 position_id,
                 amount: updated_amount,
             });
@@ -360,7 +360,7 @@ mod manager {
             
             manager.open_position(token, amount, PositionType::LONG, leverage);
 
-            manager.update_position(fee, position_id);
+            manager.update_position(fee, position_id, accounts.alice);
 
             let position = manager.get_position(accounts.alice, position_id).unwrap();
 
