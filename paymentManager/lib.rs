@@ -96,11 +96,29 @@ mod paymentManager {
 
         #[ink::test]
         pub fn contract_creation_works() {
-            let vault = AccountId::from([0x1; 32]);
+            let vault_address = AccountId::from([0x1; 32]);
+            let manager_address = AccountId::from([0x1; 32]);
 
-            let mut paymentManager = PaymentManager::new(vault);
+            let mut paymentManager = PaymentManager::new(vault_address, manager_address);
 
-            assert_eq!(paymentManager.vault, vault);
+            assert_eq!(paymentManager.vault, vault_address);
+            assert_eq!(paymentManager.manager, manager_address);
+        }
+
+        #[ink::test]
+        pub fn collect_fee_works() {
+            let vault_address = AccountId::from([0x1; 32]);
+            let manager_address = AccountId::from([0x1; 32]);
+            let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
+            let position_id = 0;
+
+            let mut paymentManager = PaymentManager::new(vault_address, manager_address);
+            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.alice);
+
+            paymentManager.collect_fee(position_id, accounts.alice);
+
+            let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
+            assert_eq!(emitted_events.len(), 1);
         }
     }
 }
