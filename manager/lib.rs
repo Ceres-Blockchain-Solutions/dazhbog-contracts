@@ -56,6 +56,14 @@ mod manager {
         position_id: PositionId,
     }
 
+    #[ink(event)]
+    pub struct PositionUpdated {
+        #[ink(topic)]
+        from: Option<AccountId>,
+        position_id: PositionId,
+        amount: Balance,
+    }
+
     #[ink(storage)]
     pub struct Manager {
         positions: Mapping<(AccountId, PositionId), Position>,
@@ -154,6 +162,51 @@ mod manager {
                 from: Some(caller),
                 position_id,
                 amount,
+            });
+
+            Ok(())
+        }
+
+        #[ink(message)]
+        pub fn update_position(
+            &mut self,
+            fee: Balance,
+            position_id: PositionId,
+        ) -> Result<()> {
+            let caller = self.env().caller();
+            let position = self.positions.get((caller, position_id)).unwrap();
+            let amount = position.amount;
+
+            let updated_amount = amount.checked_sub(fee).ok_or(Error::Underflow)?;
+
+            let new_position: Position = Position {
+                state: true,
+                token: position.token,
+                amount: updated_amount,
+                position_type: position.position_type,
+                leverage: position.leverage,
+                entry_price: position.entry_price,
+                creation_time: position.creation_time,
+            };
+
+            self.positions.insert((caller, position_id), &new_position);
+
+            // let collect_fee = build_call::<DefaultEnvironment>()
+            //     .call(self.vault)
+            //     .call_v1()
+            //     .gas_limit(0)
+            //     .exec_input(
+            //         ExecutionInput::new(Selector::new(ink::selector_bytes!("update_liquidity")))
+            //             .push_arg(token)
+            //             .push_arg(updated_amount),
+            //     )
+            //     .returns::<bool>()
+            //     .invoke();
+
+            self.env().emit_event(PositionUpdated {
+                from: Some(caller),
+                position_id,
+                amount: updated_amount,
             });
 
             Ok(())

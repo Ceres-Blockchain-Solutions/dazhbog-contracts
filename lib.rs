@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
 
 #[ink::contract]
-mod dazbog {
+mod dazhbog {
 
     /// Defines the storage of your contract.
     /// Add new fields to the below struct in order
@@ -19,26 +19,23 @@ mod dazbog {
             Self { value: init_value }
         }
 
-        /// Constructor that initializes the `bool` value to `false`.
-        ///
-        /// Constructors can delegate to other constructors.
-        #[ink(constructor)]
-        pub fn default() -> Self {
-            Self::new(Default::default())
+        #[ink(message)]
+        pub fn create_something_test(&mut self) {
+            //close user position in manager contract
+            // // transfer fees to vault
+            // let send_fee_to_vault = build_call::<DefaultEnvironment>()
+            //     .call(self.erc20)
+            //     .call_v1()
+            //     .gas_limit(0)
+            //     .exec_input(
+            //         ExecutionInput::new(Selector::new(ink::selector_bytes!("transfer")))
+            //             .push_arg(self.vault)
+            //             .push_arg(self.fee),
+            //     )
+            //     .returns::<bool>()
+            //     .invoke();
+            //update user balance
         }
 
-        /// A message that can be called on instantiated contracts.
-        /// This one flips the value of the stored `bool` from `true`
-        /// to `false` and vice versa.
-        #[ink(message)]
-        pub fn flip(&mut self) {
-            self.value = !self.value;
-        }
-
-        /// Simply returns the current value of our `bool`.
-        #[ink(message)]
-        pub fn get(&self) -> bool {
-            self.value
-        }
     }
 }
