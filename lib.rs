@@ -36,6 +36,5 @@ mod dazhbog {
             //     .invoke();
             //update user balance
         }
-
     }
 }

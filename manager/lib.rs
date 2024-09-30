@@ -101,8 +101,8 @@ mod manager {
             amount: Balance,
             position_type: PositionType,
             leverage: u32,
+            user: AccountId,
         ) -> Result<()> {
-            let caller = self.env().caller();
             // TODO: fetch from oracle price
             let entry_price: Balance = 100; // TODO: fetch from oracle
             let creation_time = self.env().block_timestamp().into();
@@ -112,11 +112,15 @@ mod manager {
 
             match position_type {
                 PositionType::LONG => {
-                    self.long_total = self.long_total.wrapping_add(entry_price.wrapping_mul(amount));
-                },
+                    self.long_total = self
+                        .long_total
+                        .wrapping_add(entry_price.wrapping_mul(amount));
+                }
                 PositionType::SHORT => {
-                    self.short_total = self.short_total.wrapping_add(entry_price.wrapping_mul(amount));
-                },
+                    self.short_total = self
+                        .short_total
+                        .wrapping_add(entry_price.wrapping_mul(amount));
+                }
             }
 
             // // transfer fees to vault
@@ -144,7 +148,7 @@ mod manager {
                 creation_time,
             };
 
-            self.positions.insert((caller, position_id), &new_position);
+            self.positions.insert((user, position_id), &new_position);
 
             // let deposit = build_call::<DefaultEnvironment>()
             //     .call(self.vault)
@@ -159,7 +163,7 @@ mod manager {
             //     .invoke();
 
             self.env().emit_event(PositionOpened {
-                from: Some(caller),
+                from: Some(user),
                 position_id,
                 amount,
             });
@@ -197,7 +201,7 @@ mod manager {
             //     .gas_limit(0)
             //     .exec_input(
             //         ExecutionInput::new(Selector::new(ink::selector_bytes!("update_liquidity")))
-            //             .push_arg(token)
+            //             .push_arg(position.token)
             //             .push_arg(updated_amount),
             //     )
             //     .returns::<bool>()
@@ -213,10 +217,10 @@ mod manager {
         }
 
         #[ink(message)]
-        pub fn close_position(&mut self, position_id: PositionId) -> Result<()> {
-            let caller = self.env().caller();
+        pub fn close_position(&mut self, position_id: PositionId, user: AccountId) -> Result<()> {
+            let position = self.positions.get((user, position_id)).unwrap();
 
-            let amount = self.positions.get((caller, position_id)).unwrap().amount;
+            let amount = position.amount;
 
             // // transfer fees to vault
             // let send_fee_to_vault = build_call::<DefaultEnvironment>()
@@ -231,16 +235,21 @@ mod manager {
             //     .returns::<bool>()
             //     .invoke();
 
-            match self.positions.get((caller, position_id)).unwrap().position_type {
+            match self
+                .positions
+                .get((user, position_id))
+                .unwrap()
+                .position_type
+            {
                 PositionType::LONG => {
                     self.long_total = self.long_total.checked_sub(1).unwrap();
-                },
+                }
                 PositionType::SHORT => {
                     self.short_total = self.short_total.checked_sub(1).unwrap();
-                },
+                }
             }
 
-            self.positions.remove((caller, position_id));
+            self.positions.remove((user, position_id));
 
             let updated_amount = amount.checked_sub(self.fee).ok_or(Error::Underflow)?;
 
@@ -250,14 +259,14 @@ mod manager {
             //     .gas_limit(0)
             //     .exec_input(
             //         ExecutionInput::new(Selector::new(ink::selector_bytes!("remove_liquidity")))
-            //             .push_arg(token)
+            //             .push_arg(position.token)
             //             .push_arg(updated_amount),
             //     )
             //     .returns::<bool>()
             //     .invoke();
 
             self.env().emit_event(PositionClosed {
-                from: Some(caller),
+                from: Some(user),
                 position_id,
             });
 
@@ -282,33 +291,49 @@ mod manager {
         #[ink(message)]
         pub fn get_number_longs(&self) -> Result<Balance> {
             Ok(self.long_total)
-        } 
+        }
 
         #[ink(message)]
         pub fn get_number_shorts(&self) -> Result<Balance> {
             Ok(self.short_total)
-        } 
+        }
 
         #[ink(message)]
         pub fn calculate_funding_rate(&self) -> Result<Balance> {
             let spot_price: Balance = 100; // TODO: fetch from oracle
             let contract_price: Balance = 100; // TODO: fetch from oracle
-            let long_short_sub = contract_price.checked_sub(spot_price).ok_or(Error::Underflow)?;
-            let ff = long_short_sub.checked_div(spot_price).ok_or(Error::Underflow)?;
+            let long_short_sub = contract_price
+                .checked_sub(spot_price)
+                .ok_or(Error::Underflow)?;
+            let ff = long_short_sub
+                .checked_div(spot_price)
+                .ok_or(Error::Underflow)?;
             let mut oii = 0;
 
             if self.long_total > self.short_total {
-                oii = self.long_total.checked_sub(self.short_total).ok_or(Error::Underflow)?;
+                oii = self
+                    .long_total
+                    .checked_sub(self.short_total)
+                    .ok_or(Error::Underflow)?;
             } else {
-                oii = self.short_total.checked_sub(self.long_total).ok_or(Error::Underflow)?;
+                oii = self
+                    .short_total
+                    .checked_sub(self.long_total)
+                    .ok_or(Error::Underflow)?;
             }
 
-            let toi = self.long_total.checked_add(self.short_total).ok_or(Error::Underflow)?;
+            let toi = self
+                .long_total
+                .checked_add(self.short_total)
+                .ok_or(Error::Underflow)?;
 
-            let funding_rate = ff.wrapping_mul(oii).checked_div(toi).ok_or(Error::Underflow)?;
+            let funding_rate = ff
+                .wrapping_mul(oii)
+                .checked_div(toi)
+                .ok_or(Error::Underflow)?;
 
             Ok(funding_rate)
-        } 
+        }
     }
 
     #[cfg(test)]
@@ -330,7 +355,7 @@ mod manager {
             ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.alice);
 
             assert_eq!(
-                manager.open_position(token, amount, PositionType::LONG, leverage),
+                manager.open_position(token, amount, PositionType::LONG, leverage, accounts.alice),
                 Ok(())
             );
 
@@ -357,8 +382,8 @@ mod manager {
             let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
 
             ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.alice);
-            
-            manager.open_position(token, amount, PositionType::LONG, leverage);
+
+            manager.open_position(token, amount, PositionType::LONG, leverage, accounts.alice);
 
             manager.update_position(fee, position_id, accounts.alice);
 
@@ -383,9 +408,10 @@ mod manager {
             let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
 
             ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.alice);
-            let res = manager.open_position(token, amount, PositionType::LONG, leverage);
+            let res =
+                manager.open_position(token, amount, PositionType::LONG, leverage, accounts.alice);
 
-            let res = manager.close_position(position_id);
+            let res = manager.close_position(position_id, accounts.alice);
 
             let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
             assert_eq!(emitted_events.len(), 2);

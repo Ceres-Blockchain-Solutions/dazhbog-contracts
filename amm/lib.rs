@@ -8,7 +8,6 @@
 /// Liquidity provisioning is limited to designated accounts only and works as deposits / withdrawals of arbitrary composition.
 pub use self::amm::{AmmPool, AmmPoolRef};
 
-
 // THIS CONTRACT DOESN'T WORK!
 #[ink::contract]
 mod amm {

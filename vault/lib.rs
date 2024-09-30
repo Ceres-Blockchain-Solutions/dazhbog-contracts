@@ -64,10 +64,13 @@ mod vault {
         }
 
         #[ink(message)]
-        pub fn add_liquidity(&mut self, token: TokenId, amount: Balance) -> Result<()> {
-            let caller = self.env().caller();
-
-            self.contributors.insert((caller, token), &amount);
+        pub fn add_liquidity(
+            &mut self,
+            token: TokenId,
+            amount: Balance,
+            user: AccountId,
+        ) -> Result<()> {
+            self.contributors.insert((user, token), &amount);
 
             // let deposit = build_call::<DefaultEnvironment>()
             //     .call(self.erc20contract)
@@ -82,7 +85,7 @@ mod vault {
             //     .invoke();
 
             self.env().emit_event(AddLiquidity {
-                from: Some(caller),
+                from: Some(user),
                 token,
                 amount,
             });
@@ -91,11 +94,15 @@ mod vault {
         }
 
         #[ink(message)]
-        pub fn update_liquidity(&mut self, token: TokenId, new_amount: Balance) -> Result<()> {
-            let caller = self.env().caller();
-            let amount = self.contributors.get(&(caller, token)).unwrap_or_default();
+        pub fn update_liquidity(
+            &mut self,
+            token: TokenId,
+            new_amount: Balance,
+            user: AccountId,
+        ) -> Result<()> {
+            let amount = self.contributors.get(&(user, token)).unwrap_or_default();
 
-            self.contributors.insert((caller, token), &new_amount);
+            self.contributors.insert((user, token), &new_amount);
 
             // let deposit = build_call::<DefaultEnvironment>()
             //     .call(self.erc20contract)
@@ -110,7 +117,7 @@ mod vault {
             //     .invoke();
 
             self.env().emit_event(UpdateLiquidity {
-                from: Some(caller),
+                from: Some(user),
                 token,
                 amount: new_amount,
             });
@@ -119,10 +126,13 @@ mod vault {
         }
 
         #[ink(message)]
-        pub fn remove_liquidity(&mut self, token: TokenId, amount: Balance) -> Result<()> {
-            let caller = self.env().caller();
-
-            self.contributors.remove((caller, token));
+        pub fn remove_liquidity(
+            &mut self,
+            token: TokenId,
+            amount: Balance,
+            user: AccountId,
+        ) -> Result<()> {
+            self.contributors.remove((user, token));
 
             // let deposit = build_call::<DefaultEnvironment>()
             //     .call(self.erc20contract)
@@ -138,7 +148,7 @@ mod vault {
             //     .invoke();
 
             self.env().emit_event(WithdrawLiquidity {
-                from: Some(caller),
+                from: Some(user),
                 token,
                 amount,
             });
@@ -163,7 +173,7 @@ mod vault {
             let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
 
             ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.alice);
-            vault.add_liquidity(123, 1);
+            vault.add_liquidity(123, 1, accounts.alice);
 
             let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
             assert_eq!(emitted_events.len(), 1);
@@ -178,8 +188,8 @@ mod vault {
             let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
 
             ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.alice);
-            vault.add_liquidity(123, 1);
-            vault.update_liquidity(123, 2);
+            vault.add_liquidity(123, 1, accounts.alice);
+            vault.update_liquidity(123, 2, accounts.alice);
 
             let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
             assert_eq!(emitted_events.len(), 2);
@@ -194,9 +204,9 @@ mod vault {
             let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
 
             ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.alice);
-            vault.add_liquidity(123, 1);
+            vault.add_liquidity(123, 1, accounts.alice);
 
-            vault.remove_liquidity(123, 1);
+            vault.remove_liquidity(123, 1, accounts.alice);
 
             let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
             assert_eq!(emitted_events.len(), 2);
