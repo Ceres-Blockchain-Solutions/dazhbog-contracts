@@ -345,6 +345,32 @@ mod manager {
         }
 
         #[ink::test]
+        pub fn update_position_works() {
+            let token = 1;
+            let position_id = 0;
+            let amount = 100;
+            let leverage = 10;
+            let fee = 10;
+            let erc20 = AccountId::from([0x0; 32]);
+            let vault = AccountId::from([0x1; 32]);
+            let mut manager = Manager::new(vault, fee, erc20);
+            let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
+
+            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.alice);
+            
+            manager.open_position(token, amount, PositionType::LONG, leverage);
+
+            manager.update_position(fee, position_id);
+
+            let position = manager.get_position(accounts.alice, position_id).unwrap();
+
+            assert_eq!(position.amount, amount - fee - fee);
+
+            let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
+            assert_eq!(emitted_events.len(), 2);
+        }
+
+        #[ink::test]
         pub fn close_position_works() {
             let token = 1;
             let position_id = 0;
