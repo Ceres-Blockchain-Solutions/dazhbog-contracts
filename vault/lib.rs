@@ -1,6 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
 
-pub type TokenId = u128 ;
+pub type TokenId = u128;
 pub type Result<T> = core::result::Result<T, Error>;
 pub type PositionId = u128;
 
@@ -9,6 +9,8 @@ pub type PositionId = u128;
 pub enum Error {
     Overflow,
     Underflow,
+    ZeroAmount,
+    NonZeroAmount,
 }
 
 #[ink::contract]
@@ -46,7 +48,6 @@ mod vault {
     }
 
     #[ink(storage)]
-    // #[derive(Default)]
     pub struct Vault {
         contributors: Mapping<(AccountId, TokenId), Balance>,
         erc20contract: AccountId,
@@ -70,6 +71,12 @@ mod vault {
             amount: Balance,
             user: AccountId,
         ) -> Result<()> {
+            let current_amount = self.contributors.get(&(user, token)).unwrap_or_default();
+
+            if current_amount > 0 {
+                return Err(Error::NonZeroAmount);
+            }
+
             self.contributors.insert((user, token), &amount);
 
             let deposit = build_call::<DefaultEnvironment>()
@@ -103,6 +110,10 @@ mod vault {
         ) -> Result<()> {
             let amount = self.contributors.get(&(user, token)).unwrap_or_default();
 
+            if amount == 0 {
+                return Err(Error::ZeroAmount);
+            }
+
             let new_amount_final = new_amount.checked_add(amount).ok_or(Error::Overflow)?;
 
             self.contributors.insert((user, token), &new_amount_final);
@@ -130,12 +141,13 @@ mod vault {
         }
 
         #[ink(message)]
-        pub fn remove_liquidity(
-            &mut self,
-            token: TokenId,
-            amount: Balance,
-            user: AccountId,
-        ) -> Result<()> {
+        pub fn remove_liquidity(&mut self, token: TokenId, user: AccountId) -> Result<()> {
+            let current_amount = self.contributors.get(&(user, token)).unwrap_or_default();
+
+            if current_amount == 0 {
+                return Err(Error::ZeroAmount);
+            }
+
             self.contributors.remove((user, token));
 
             let withdraw = build_call::<DefaultEnvironment>()
@@ -145,7 +157,7 @@ mod vault {
                 .exec_input(
                     ExecutionInput::new(Selector::new(ink::selector_bytes!("transfer")))
                         .push_arg(self.env().caller())
-                        .push_arg(amount)
+                        .push_arg(current_amount)
                 )
                 .returns::<bool>()
                 .invoke();
@@ -153,7 +165,7 @@ mod vault {
             self.env().emit_event(WithdrawLiquidity {
                 from: Some(user),
                 token,
-                amount,
+                amount: current_amount,
             });
 
             Ok(())
@@ -176,12 +188,30 @@ mod vault {
             let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
 
             ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.alice);
-            vault.add_liquidity(123, 1, accounts.alice);
+            assert_eq!(vault.add_liquidity(123, 1, accounts.alice), Ok(()));
 
             let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
             assert_eq!(emitted_events.len(), 1);
 
             assert_eq!(vault.get_contributor_balance(accounts.alice, 123), 1);
+        }
+
+        #[ink::test]
+        pub fn add_liquidity_fails() {
+            let erc20 = AccountId::from([0x0; 32]);
+            let mut vault = Vault::new(erc20);
+            let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
+
+            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.alice);
+            assert_eq!(vault.add_liquidity(123, 1, accounts.alice), Ok(()));
+
+            assert_eq!(
+                vault.add_liquidity(123, 1, accounts.alice),
+                Err(Error::NonZeroAmount)
+            );
+
+            let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
+            assert_eq!(emitted_events.len(), 1);
         }
 
         #[ink::test]
@@ -201,7 +231,39 @@ mod vault {
         }
 
         #[ink::test]
+        pub fn update_liquidity_zero_amount_fails() {
+            let erc20 = AccountId::from([0x0; 32]);
+            let mut vault = Vault::new(erc20);
+            let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
+
+            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.alice);
+            assert_eq!(
+                vault.update_liquidity(123, 1, accounts.alice),
+                Err(Error::ZeroAmount)
+            );
+
+            let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
+            assert_eq!(emitted_events.len(), 0);
+        }
+
+        #[ink::test]
         pub fn remove_liquidity_works() {
+            let erc20 = AccountId::from([0x0; 32]);
+            let mut vault = Vault::new(erc20);
+            let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
+
+            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.alice);
+            assert_eq!(
+                vault.remove_liquidity(123, accounts.alice),
+                Err(Error::ZeroAmount)
+            );
+
+            let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
+            assert_eq!(emitted_events.len(), 0);
+        }
+
+        #[ink::test]
+        pub fn remove_liquidity_fails() {
             let erc20 = AccountId::from([0x0; 32]);
             let mut vault = Vault::new(erc20);
             let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
@@ -209,7 +271,7 @@ mod vault {
             ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.alice);
             vault.add_liquidity(123, 1, accounts.alice);
 
-            vault.remove_liquidity(123, 1, accounts.alice);
+            vault.remove_liquidity(123, accounts.alice);
 
             let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
             assert_eq!(emitted_events.len(), 2);
