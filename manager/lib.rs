@@ -170,12 +170,14 @@ mod manager {
             position_id: PositionId,
             user: AccountId,
         ) -> Result<()> {
-            let position = self.positions.get((user, position_id)).unwrap();
-            let amount = position.amount;
-
-            if amount == 0 {
-                return Err(Error::ZeroAmount);
+            let temp = self.get_position(user, position_id);
+            
+            if temp.is_err() {
+                return Err(Error::NotFound)
             }
+
+            let position = temp.unwrap();
+            let amount = position.amount;
 
             let new_position: Position = Position {
                 state: true,
@@ -196,7 +198,7 @@ mod manager {
                 .exec_input(
                     ExecutionInput::new(Selector::new(ink::selector_bytes!("update_liquidity")))
                         .push_arg(position.token)
-                        .push_arg(updated_amount)
+                        .push_arg(amount)
                         .push_arg(self.env().caller()),
                 )
                 .returns::<bool>()
@@ -213,11 +215,13 @@ mod manager {
 
         #[ink(message)]
         pub fn close_position(&mut self, position_id: PositionId, user: AccountId) -> Result<()> {
-            let temp = self.positions.get(&(user, self.position_id));
+            let temp = self.get_position(user, position_id);
 
-            if !temp.is_some() {
-                return Err(Error::ZeroAmount);
+            if temp.is_err() {
+                return Err(Error::NotFound);
             }
+
+            let position = temp.unwrap();
 
             match self
                 .positions
@@ -257,18 +261,8 @@ mod manager {
         }
 
         #[ink(message)]
-        pub fn get_position(
-            &self,
-            account: AccountId,
-            position_id: PositionId,
-        ) -> Result<Position> {
-            let temp = self.positions.get((account, position_id));
-
-            if temp.is_some() {
-                Ok(temp.unwrap())
-            } else {
-                Err(Error::NotFound)
-            }
+        pub fn get_position(&self, user: AccountId, position_id: u128) -> Result<Position> {
+            self.positions.get(&(user, position_id)).ok_or(Error::NotFound)
         }
 
         #[ink(message)]
@@ -378,7 +372,7 @@ mod manager {
         }
 
         #[ink::test]
-        pub fn update_position_fails() {
+        pub fn update_position_works() {
             let token = 1;
             let position_id = 0;
             let amount = 0;
@@ -392,28 +386,8 @@ mod manager {
 
             assert_eq!(
                 manager.update_position(amount, position_id, accounts.alice),
-                Err(Error::ZeroAmount)
+                Ok(())
             );
-
-            let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
-            assert_eq!(emitted_events.len(), 1);
-        }
-
-        #[ink::test]
-        pub fn update_position_works() {
-            let token = 1;
-            let position_id = 0;
-            let amount = 100;
-            let leverage = 10;
-            let vault = AccountId::from([0x1; 32]);
-            let mut manager = Manager::new(vault);
-            let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
-
-            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.alice);
-
-            manager.open_position(token, amount, PositionType::LONG, leverage, accounts.alice);
-
-            manager.update_position(amount, position_id, accounts.alice);
 
             let position = manager.get_position(accounts.alice, position_id).unwrap();
 
@@ -424,7 +398,28 @@ mod manager {
         }
 
         #[ink::test]
-        pub fn close_position_works() {
+        pub fn update_position_fails() {
+            let token = 1;
+            let position_id = 0;
+            let amount = 100;
+            let leverage = 10;
+            let vault = AccountId::from([0x1; 32]);
+            let mut manager = Manager::new(vault);
+            let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
+
+            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.alice);
+
+            assert_eq!(
+                manager.update_position(amount, position_id, accounts.alice),
+                Err(Error::NotFound)
+            );
+
+            let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
+            assert_eq!(emitted_events.len(), 0);
+        }
+
+        #[ink::test]
+        pub fn close_position_fails() {
             let token = 1;
             let position_id = 0;
             let amount = 100;
@@ -436,7 +431,7 @@ mod manager {
             ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.alice);
             assert_eq!(
                 manager.close_position(position_id, accounts.alice),
-                Err(Error::ZeroAmount)
+                Err(Error::NotFound)
             );
 
             let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
@@ -448,7 +443,7 @@ mod manager {
         }
 
         #[ink::test]
-        pub fn close_position_fails() {
+        pub fn close_position_works() {
             let token = 1;
             let position_id = 0;
             let amount = 100;
