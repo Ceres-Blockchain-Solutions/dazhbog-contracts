@@ -149,7 +149,7 @@ mod manager {
                     ExecutionInput::new(Selector::new(ink::selector_bytes!("add_liquidity")))
                         .push_arg(token)
                         .push_arg(amount)
-                        .push_arg(self.env().caller()),
+                        .push_arg(user),
                 )
                 .returns::<bool>()
                 .invoke();
@@ -199,7 +199,7 @@ mod manager {
                     ExecutionInput::new(Selector::new(ink::selector_bytes!("update_liquidity")))
                         .push_arg(position.token)
                         .push_arg(amount)
-                        .push_arg(self.env().caller()),
+                        .push_arg(user),
                 )
                 .returns::<bool>()
                 .invoke();
@@ -246,7 +246,6 @@ mod manager {
                 .exec_input(
                     ExecutionInput::new(Selector::new(ink::selector_bytes!("remove_liquidity")))
                         .push_arg(position.token)
-                        .push_arg(position.amount)
                         .push_arg(user),
                 )
                 .returns::<bool>()

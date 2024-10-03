@@ -81,15 +81,17 @@ mod vault {
 
             self.contributors.insert((user, token), &amount);
 
+            let deposit_amount = amount.checked_add(self.fee).ok_or(Error::Overflow)?;
+
             let deposit = build_call::<DefaultEnvironment>()
                 .call(self.erc20contract)
                 .call_v1()
                 .gas_limit(0)
                 .exec_input(
                     ExecutionInput::new(Selector::new(ink::selector_bytes!("transfer_from")))
-                        .push_arg(self.env().caller())
+                        .push_arg(user)
                         .push_arg(self.env().account_id())
-                        .push_arg(amount.checked_add(self.fee).ok_or(Error::Overflow)),
+                        .push_arg(deposit_amount)
                 )
                 .returns::<bool>()
                 .invoke();
@@ -117,6 +119,7 @@ mod vault {
             }
 
             let new_amount_final = new_amount.checked_add(amount).ok_or(Error::Overflow)?;
+            let new_amount_with_fee = new_amount_final.checked_add(self.fee).ok_or(Error::Overflow)?;
 
             self.contributors.insert((user, token), &new_amount_final);
 
@@ -126,9 +129,9 @@ mod vault {
                 .gas_limit(0)
                 .exec_input(
                     ExecutionInput::new(Selector::new(ink::selector_bytes!("transfer_from")))
-                        .push_arg(self.env().caller())
+                        .push_arg(user)
                         .push_arg(self.env().account_id())
-                        .push_arg(new_amount.checked_add(self.fee).ok_or(Error::Overflow)),
+                        .push_arg(amount),
                 )
                 .returns::<bool>()
                 .invoke();
@@ -150,6 +153,8 @@ mod vault {
                 return Err(Error::ZeroAmount);
             }
 
+            let remove_amount = current_amount.checked_sub(self.fee).ok_or(Error::Underflow)?;
+
             self.contributors.remove((user, token));
 
             let withdraw = build_call::<DefaultEnvironment>()
@@ -158,8 +163,8 @@ mod vault {
                 .gas_limit(0)
                 .exec_input(
                     ExecutionInput::new(Selector::new(ink::selector_bytes!("transfer")))
-                        .push_arg(self.env().caller())
-                        .push_arg(current_amount.checked_sub(self.fee).ok_or(Error::Underflow)),
+                        .push_arg(user)
+                        .push_arg(remove_amount),
                 )
                 .returns::<bool>()
                 .invoke();
