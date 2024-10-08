@@ -38,7 +38,7 @@ mod manager {
         amount: Balance,
         position_type: PositionType,
         leverage: u32,
-        entry_price: Balance,
+        position_value: Balance,
         creation_time: u128,
     }
 
@@ -108,7 +108,7 @@ mod manager {
             }
 
             // TODO: fetch from oracle price
-            let entry_price: Balance = 100; // TODO: fetch from oracle
+            let entry_price: Balance = 1000; // TODO: fetch from oracle
             let creation_time = self.env().block_timestamp().into();
 
             let position_id = self.position_id;
@@ -129,30 +129,32 @@ mod manager {
                 }
             }
 
+            let position_value = entry_price.wrapping_mul(amount);
+
             let new_position: Position = Position {
                 state: true,
                 token,
                 amount,
                 position_type,
                 leverage,
-                entry_price,
+                position_value,
                 creation_time,
             };
 
             self.positions.insert((user, position_id), &new_position);
 
-            let deposit = build_call::<DefaultEnvironment>()
-                .call(self.vault)
-                .call_v1()
-                .gas_limit(0)
-                .exec_input(
-                    ExecutionInput::new(Selector::new(ink::selector_bytes!("add_liquidity")))
-                        .push_arg(token)
-                        .push_arg(amount)
-                        .push_arg(user),
-                )
-                .returns::<bool>()
-                .invoke();
+            // let deposit = build_call::<DefaultEnvironment>()
+            //     .call(self.vault)
+            //     .call_v1()
+            //     .gas_limit(0)
+            //     .exec_input(
+            //         ExecutionInput::new(Selector::new(ink::selector_bytes!("add_liquidity")))
+            //             .push_arg(token)
+            //             .push_arg(amount)
+            //             .push_arg(user),
+            //     )
+            //     .returns::<bool>()
+            //     .invoke();
 
             self.env().emit_event(PositionOpened {
                 from: Some(user),
@@ -176,38 +178,55 @@ mod manager {
                 return Err(Error::NotFound)
             }
 
+            // TODO: fetch from oracle price
+            let current_price: Balance = 2000; // TODO: fetch from oracle
             let position = temp.unwrap();
             let amount = position.amount;
+
+            if amount == 0 {
+                return Err(Error::ZeroAmount)
+            }
+
+            let mut new_amount = 0;
+            let mut new_position_value = 0;
+
+            if updated_amount > amount {
+                new_amount = updated_amount.checked_sub(amount).ok_or(Error::Underflow)?;
+                new_position_value = position.position_value.checked_add(current_price.wrapping_mul(new_amount)).ok_or(Error::Overflow)?;
+            } else {
+                new_amount = amount.checked_sub(updated_amount).ok_or(Error::Underflow)?;
+                new_position_value = position.position_value.checked_sub(current_price.wrapping_mul(new_amount)).ok_or(Error::Underflow)?;
+            }
 
             let new_position: Position = Position {
                 state: true,
                 token: position.token,
-                amount: amount.checked_add(updated_amount).ok_or(Error::Overflow)?,
+                amount: updated_amount,
                 position_type: position.position_type,
                 leverage: position.leverage,
-                entry_price: position.entry_price,
+                position_value: new_position_value,
                 creation_time: position.creation_time,
             };
 
             self.positions.insert((user, position_id), &new_position);
 
-            let collect_fee = build_call::<DefaultEnvironment>()
-                .call(self.vault)
-                .call_v1()
-                .gas_limit(0)
-                .exec_input(
-                    ExecutionInput::new(Selector::new(ink::selector_bytes!("update_liquidity")))
-                        .push_arg(position.token)
-                        .push_arg(amount)
-                        .push_arg(user),
-                )
-                .returns::<bool>()
-                .invoke();
+            // let collect_fee = build_call::<DefaultEnvironment>()
+            //     .call(self.vault)
+            //     .call_v1()
+            //     .gas_limit(0)
+            //     .exec_input(
+            //         ExecutionInput::new(Selector::new(ink::selector_bytes!("update_liquidity")))
+            //             .push_arg(position.token)
+            //             .push_arg(amount)
+            //             .push_arg(user),
+            //     )
+            //     .returns::<bool>()
+            //     .invoke();
 
             self.env().emit_event(PositionUpdated {
                 from: Some(user),
                 position_id,
-                amount: amount.checked_add(updated_amount).ok_or(Error::Overflow)?,
+                amount: updated_amount,
             });
 
             Ok(())
@@ -239,17 +258,17 @@ mod manager {
 
             self.positions.remove((user, position_id));
 
-            let withdraw = build_call::<DefaultEnvironment>()
-                .call(self.vault)
-                .call_v1()
-                .gas_limit(0)
-                .exec_input(
-                    ExecutionInput::new(Selector::new(ink::selector_bytes!("remove_liquidity")))
-                        .push_arg(position.token)
-                        .push_arg(user),
-                )
-                .returns::<bool>()
-                .invoke();
+            // let withdraw = build_call::<DefaultEnvironment>()
+            //     .call(self.vault)
+            //     .call_v1()
+            //     .gas_limit(0)
+            //     .exec_input(
+            //         ExecutionInput::new(Selector::new(ink::selector_bytes!("remove_liquidity")))
+            //             .push_arg(position.token)
+            //             .push_arg(user),
+            //     )
+            //     .returns::<bool>()
+            //     .invoke();
 
             self.env().emit_event(PositionClosed {
                 from: Some(user),
@@ -341,6 +360,7 @@ mod manager {
             assert_eq!(position.token, token);
             assert_eq!(position.amount, amount);
             assert_eq!(position.leverage, leverage);
+            assert_eq!(position.position_value, amount * 1000);
 
             let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
             assert_eq!(emitted_events.len(), 1);
@@ -374,7 +394,8 @@ mod manager {
         pub fn update_position_works() {
             let token = 1;
             let position_id = 0;
-            let amount = 0;
+            let amount = 70;
+            let new_amount_1 = 100;
             let leverage = 10;
             let vault = AccountId::from([0x1; 32]);
             let mut manager = Manager::new(vault);
@@ -384,16 +405,29 @@ mod manager {
             manager.open_position(token, amount, PositionType::LONG, leverage, accounts.alice);
 
             assert_eq!(
-                manager.update_position(amount, position_id, accounts.alice),
+                manager.update_position(new_amount_1, position_id, accounts.alice),
                 Ok(())
             );
 
             let position = manager.get_position(accounts.alice, position_id).unwrap();
 
-            assert_eq!(position.amount, amount * 2);
+            assert_eq!(position.position_value, amount * 1000 + 30 * 2000);
+
+            assert_eq!(position.amount, new_amount_1);
+
+            assert_eq!(
+                manager.update_position(amount, position_id, accounts.alice),
+                Ok(())
+            );
+
+            let position = manager.get_position(accounts.alice, position_id).unwrap();
+            assert_eq!(position.position_value, amount * 1000 + 30 * 2000 - 30 * 2000);
+
+
+            assert_eq!(position.amount, amount);
 
             let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
-            assert_eq!(emitted_events.len(), 2);
+            assert_eq!(emitted_events.len(), 3);
         }
 
         #[ink::test]
