@@ -83,18 +83,18 @@ mod vault {
 
             let deposit_amount = amount.checked_add(self.fee).ok_or(Error::Overflow)?;
 
-            let deposit = build_call::<DefaultEnvironment>()
-                .call(self.erc20contract)
-                .call_v1()
-                .gas_limit(0)
-                .exec_input(
-                    ExecutionInput::new(Selector::new(ink::selector_bytes!("transfer_from")))
-                        .push_arg(user)
-                        .push_arg(self.env().account_id())
-                        .push_arg(deposit_amount)
-                )
-                .returns::<bool>()
-                .invoke();
+            // let deposit = build_call::<DefaultEnvironment>()
+            //     .call(self.erc20contract)
+            //     .call_v1()
+            //     .gas_limit(0)
+            //     .exec_input(
+            //         ExecutionInput::new(Selector::new(ink::selector_bytes!("transfer_from")))
+            //             .push_arg(user)
+            //             .push_arg(self.env().account_id())
+            //             .push_arg(deposit_amount)
+            //     )
+            //     .returns::<bool>()
+            //     .invoke();
 
             self.env().emit_event(AddLiquidity {
                 from: Some(user),
@@ -118,23 +118,28 @@ mod vault {
                 return Err(Error::ZeroAmount);
             }
 
-            let new_amount_final = new_amount.checked_add(amount).ok_or(Error::Overflow)?;
-            let new_amount_with_fee = new_amount_final.checked_add(self.fee).ok_or(Error::Overflow)?;
+            let mut new_amount_final = 0;
 
-            self.contributors.insert((user, token), &new_amount_final);
+            if new_amount > amount {
+                new_amount_final = new_amount.checked_sub(amount).ok_or(Error::Underflow)?;
+            } else {
+                new_amount_final = amount.checked_sub(new_amount).ok_or(Error::Underflow)?;
+            }
 
-            let deposit = build_call::<DefaultEnvironment>()
-                .call(self.erc20contract)
-                .call_v1()
-                .gas_limit(0)
-                .exec_input(
-                    ExecutionInput::new(Selector::new(ink::selector_bytes!("transfer_from")))
-                        .push_arg(user)
-                        .push_arg(self.env().account_id())
-                        .push_arg(amount),
-                )
-                .returns::<bool>()
-                .invoke();
+            self.contributors.insert((user, token), &new_amount);
+
+            // let deposit = build_call::<DefaultEnvironment>()
+            //     .call(self.erc20contract)
+            //     .call_v1()
+            //     .gas_limit(0)
+            //     .exec_input(
+            //         ExecutionInput::new(Selector::new(ink::selector_bytes!("transfer_from")))
+            //             .push_arg(user)
+            //             .push_arg(self.env().account_id())
+            //             .push_arg(new_amount_final),
+            //     )
+            //     .returns::<bool>()
+            //     .invoke();
 
             self.env().emit_event(UpdateLiquidity {
                 from: Some(user),
@@ -157,17 +162,17 @@ mod vault {
 
             self.contributors.remove((user, token));
 
-            let withdraw = build_call::<DefaultEnvironment>()
-                .call(self.erc20contract)
-                .call_v1()
-                .gas_limit(0)
-                .exec_input(
-                    ExecutionInput::new(Selector::new(ink::selector_bytes!("transfer")))
-                        .push_arg(user)
-                        .push_arg(remove_amount),
-                )
-                .returns::<bool>()
-                .invoke();
+            // let withdraw = build_call::<DefaultEnvironment>()
+            //     .call(self.erc20contract)
+            //     .call_v1()
+            //     .gas_limit(0)
+            //     .exec_input(
+            //         ExecutionInput::new(Selector::new(ink::selector_bytes!("transfer")))
+            //             .push_arg(user)
+            //             .push_arg(remove_amount),
+            //     )
+            //     .returns::<bool>()
+            //     .invoke();
 
             self.env().emit_event(WithdrawLiquidity {
                 from: Some(user),
@@ -235,19 +240,20 @@ mod vault {
             let fee = 10;
             let token = 123;
             let amount = 100;
+            let new_amount = 120;
             let mut vault = Vault::new(erc20, fee);
             let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
 
             ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.alice);
             vault.add_liquidity(token, amount, accounts.alice);
-            vault.update_liquidity(token, amount, accounts.alice);
+            vault.update_liquidity(token, new_amount, accounts.alice);
 
             let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
             assert_eq!(emitted_events.len(), 2);
 
             assert_eq!(
                 vault.get_contributor_balance(accounts.alice, 123),
-                amount * 2
+                new_amount
             );
         }
 
@@ -297,9 +303,8 @@ mod vault {
             let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
 
             ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.alice);
-            vault.add_liquidity(token, 1, accounts.alice);
-
-            vault.remove_liquidity(token, accounts.alice);
+            assert_eq!(vault.add_liquidity(token, 100, accounts.alice), Ok(()));
+            assert_eq!(vault.remove_liquidity(token, accounts.alice), Ok(()));
 
             let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
             assert_eq!(emitted_events.len(), 2);

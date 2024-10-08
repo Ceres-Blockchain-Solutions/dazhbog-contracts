@@ -1,6 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
 
 pub type PositionId = u128;
+pub type TokenId = u128;
 
 #[derive(Debug, PartialEq, Eq)]
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
@@ -16,12 +17,32 @@ mod paymentManager {
     use ink::env::DefaultEnvironment;
     use ink::storage::Mapping;
 
+    #[ink::scale_derive(Encode, Decode, TypeInfo)]
+    #[derive(Debug, PartialEq, Eq)]
+    #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
+    pub enum PositionType {
+        LONG,
+        SHORT,
+    }
+
+    #[ink::scale_derive(Encode, Decode, TypeInfo)]
+    #[derive(Debug, PartialEq, Eq)]
+    #[cfg_attr(feature = "std", derive(ink::storage::traits::StorageLayout))]
+    pub struct Position {
+        state: bool,
+        token: TokenId,
+        amount: Balance,
+        position_type: PositionType,
+        leverage: u32,
+        entry_price: Balance,
+        creation_time: u128,
+    }
+
     #[ink(event)]
     pub struct MaintenanceFeeCollected {
         #[ink(topic)]
         from: Option<AccountId>,
         position_id: PositionId,
-        fee: Balance,
     }
 
     #[ink(event)]
@@ -33,38 +54,58 @@ mod paymentManager {
 
     #[ink(storage)]
     pub struct PaymentManager {
-        vault: AccountId,
         manager: AccountId,
     }
 
     impl PaymentManager {
         #[ink(constructor)]
-        pub fn new(vault_address: AccountId, manager_address: AccountId) -> Self {
-            let vault = vault_address;
+        pub fn new(manager_address: AccountId) -> Self {
             let manager = manager_address;
-            Self { vault, manager }
+            Self { manager }
+        }
+        
+        #[ink(message)]
+        pub fn update_position(&self, position_id: PositionId, user: AccountId) {
+            let position = build_call::<DefaultEnvironment>()
+                .call(self.manager)
+                .call_v1()
+                .gas_limit(0)
+                .exec_input(
+                    ExecutionInput::new(Selector::new(ink::selector_bytes!("get_position")))
+                        .push_arg(user)
+                        .push_arg(position_id),
+                )
+                .returns::<Position>()
+                .invoke();
+
+            let fee = 10; //TODO calculate fee for maintenance position
+            // FIX: Manager to be contract, not AccountId
+            // let position = self.manager.get_position(user, position_id).unwrap();
+            
+            let check =
+                self.check_liquidation(position.amount, position.entry_price, position.leverage, position.position_type);
+
+            if (check) {
+                self.liquidation(position_id, user);
+            } else {
+                self.collect_fee(position_id, user);
+            }
+
+            self.env().emit_event(PositionUpdated {
+                from: Some(user),
+                position_id,
+            });
+        }
+        
+        #[ink(message)]
+        pub fn liquidation(&self, position_id: PositionId, user: AccountId) {
+            //calculate
+            //check
+            //liquidate if needed
         }
 
         #[ink(message)]
-        pub fn liquidation(&mut self) {
-            //close user position in manager contract
-            // // transfer fees to vault
-            // let send_fee_to_vault = build_call::<DefaultEnvironment>()
-            //     .call(self.erc20)
-            //     .call_v1()
-            //     .gas_limit(0)
-            //     .exec_input(
-            //         ExecutionInput::new(Selector::new(ink::selector_bytes!("transfer")))
-            //             .push_arg(self.vault)
-            //             .push_arg(self.fee),
-            //     )
-            //     .returns::<bool>()
-            //     .invoke();
-            //update user balance
-        }
-
-        #[ink(message)]
-        pub fn collect_fee(&self, position_id: PositionId, user: AccountId, fee: Balance) {
+        pub fn collect_fee(&self, position_id: PositionId, user: AccountId) {
             // // call manager to update position
             // let update_position = build_call::<DefaultEnvironment>()
             //     .call(self.manager)
@@ -81,53 +122,42 @@ mod paymentManager {
             self.env().emit_event(MaintenanceFeeCollected {
                 from: Some(user),
                 position_id,
-                fee,
             });
 
             // Ok(())
         }
-
+        
         #[ink(message)]
-        pub fn update_position(&self, position_id: PositionId, user: AccountId) {
-            let fee = 10; //TODO calculate fee for maintenance position
-                          // FIX: Manager to be contract, not AccountId
-                          // let position = self.manager.get_position(user, position_id).unwrap();
+        pub fn check_liquidation(
+            &self,
+            amount: Balance,
+            entry_price: Balance,
+            leverage: u32,
+            position_type: PositionType,
+        ) -> bool {
+            let deposit = amount.wrapping_mul(entry_price as u128);
+            let entry_value = deposit.wrapping_mul(leverage as u128);
+            //TODO ping oracle for current price
+            let current_price = 1000;
+            let real_amount_with_leverage = amount.wrapping_mul(leverage as u128);
+            let real_value = real_amount_with_leverage.wrapping_mul(current_price);
 
-            //calls collect fee
-            self.collect_fee(position_id, user, fee);
-
-            // update position in manager contract
-            // let update_position_manager = build_call::<DefaultEnvironment>()
-            //     .call(self.manager)
-            //     .call_v1()
-            //     .gas_limit(0)
-            //     .exec_input(
-            //         ExecutionInput::new(Selector::new(ink::selector_bytes!("update_position")))
-            //             .push_arg(fee)
-            //             .push_arg(position_id)
-            //             .push_arg(user),
-            //     )
-            //     .returns::<bool>()
-            //     .invoke();
-
-            // // update vault
-            // let update_vault = build_call::<DefaultEnvironment>()
-            //     .call(self.vault)
-            //     .call_v1()
-            //     .gas_limit(0)
-            //     .exec_input(
-            //         ExecutionInput::new(Selector::new(ink::selector_bytes!("update_liquidity")))
-            //             .push_arg(position.token)
-            //             .push_arg(position.amount - fee)
-            //             .push_arg(user)
-            //     )
-            //     .returns::<bool>()
-            //     .invoke();
-
-            self.env().emit_event(PositionUpdated {
-                from: Some(user),
-                position_id,
-            });
+            match position_type {
+                PositionType::LONG => {
+                    if (deposit == entry_value.checked_sub(real_value).unwrap()) {
+                        true
+                    } else {
+                        false
+                    }
+                },
+                PositionType::SHORT => {
+                    if (deposit == real_value.checked_sub(entry_value).unwrap()) {
+                        true
+                    } else {
+                        false
+                    }
+                },
+            }
         }
     }
 
@@ -137,27 +167,23 @@ mod paymentManager {
 
         #[ink::test]
         pub fn contract_creation_works() {
-            let vault_address = AccountId::from([0x1; 32]);
             let manager_address = AccountId::from([0x1; 32]);
 
-            let mut paymentManager = PaymentManager::new(vault_address, manager_address);
+            let mut paymentManager = PaymentManager::new(manager_address);
 
-            assert_eq!(paymentManager.vault, vault_address);
             assert_eq!(paymentManager.manager, manager_address);
         }
 
         #[ink::test]
         pub fn collect_fee_works() {
-            let vault_address = AccountId::from([0x1; 32]);
             let manager_address = AccountId::from([0x1; 32]);
-            let fee = 10;
             let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
             let position_id = 0;
 
-            let mut paymentManager = PaymentManager::new(vault_address, manager_address);
+            let mut paymentManager = PaymentManager::new(manager_address);
             ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.alice);
 
-            paymentManager.collect_fee(position_id, accounts.alice, fee);
+            paymentManager.collect_fee(position_id, accounts.alice);
 
             let emitted_events = ink::env::test::recorded_events().collect::<Vec<_>>();
             assert_eq!(emitted_events.len(), 1);
@@ -165,12 +191,11 @@ mod paymentManager {
 
         #[ink::test]
         pub fn update_position_works() {
-            let vault_address = AccountId::from([0x1; 32]);
             let manager_address = AccountId::from([0x1; 32]);
             let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
             let position_id = 0;
 
-            let mut paymentManager = PaymentManager::new(vault_address, manager_address);
+            let mut paymentManager = PaymentManager::new(manager_address);
             ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.alice);
 
             paymentManager.update_position(position_id, accounts.alice);

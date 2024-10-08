@@ -217,7 +217,7 @@ mod manager {
             //     .exec_input(
             //         ExecutionInput::new(Selector::new(ink::selector_bytes!("update_liquidity")))
             //             .push_arg(position.token)
-            //             .push_arg(amount)
+            //             .push_arg(updated_amount)
             //             .push_arg(user),
             //     )
             //     .returns::<bool>()
