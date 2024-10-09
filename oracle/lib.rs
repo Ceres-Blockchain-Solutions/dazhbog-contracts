@@ -4,22 +4,22 @@
 mod oracle {
     #[ink(storage)]
     pub struct Oracle {
-        price: Balance,
+        price: u32,
     }
 
     impl Oracle {
         #[ink(constructor)]
-        pub fn new(price: Balance) -> Self {
+        pub fn new(price: u32) -> Self {
             Self { price }
         }
         
         #[ink(message)]
-        pub fn change_price(&mut self, new_price: Balance) {
+        pub fn change_price(&mut self, new_price: u32) {
             self.price = new_price;
         }
 
         #[ink(message)]
-        pub fn get_price(&mut self) -> Balance{
+        pub fn get_price(&mut self) -> u32{
             self.price
         }
     }

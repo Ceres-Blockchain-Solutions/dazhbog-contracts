@@ -52,6 +52,7 @@ mod vault {
         contributors: Mapping<(AccountId, TokenId), Balance>,
         erc20contract: AccountId,
         fee: Balance,
+        total_amount_deposit: Balance,
     }
 
     impl Vault {
@@ -59,10 +60,12 @@ mod vault {
         pub fn new(erc20_contract_address: AccountId, fee: Balance) -> Self {
             let contributors = Mapping::default();
             let erc20contract = erc20_contract_address;
+            let total_amount_deposit = 0;
             Self {
                 contributors,
                 erc20contract,
                 fee,
+                total_amount_deposit
             }
         }
 
@@ -83,6 +86,8 @@ mod vault {
 
             let deposit_amount = amount.checked_add(self.fee).ok_or(Error::Overflow)?;
 
+            self.total_amount_deposit.checked_add(deposit_amount);
+            
             // let deposit = build_call::<DefaultEnvironment>()
             //     .call(self.erc20contract)
             //     .call_v1()
@@ -128,6 +133,8 @@ mod vault {
 
             self.contributors.insert((user, token), &new_amount);
 
+            self.total_amount_deposit.checked_add(new_amount_final);
+
             // let deposit = build_call::<DefaultEnvironment>()
             //     .call(self.erc20contract)
             //     .call_v1()
@@ -162,6 +169,8 @@ mod vault {
 
             self.contributors.remove((user, token));
 
+            self.total_amount_deposit.checked_sub(current_amount);
+
             // let withdraw = build_call::<DefaultEnvironment>()
             //     .call(self.erc20contract)
             //     .call_v1()
@@ -179,6 +188,19 @@ mod vault {
                 token,
                 amount: current_amount,
             });
+
+            Ok(())
+        }
+
+        #[ink(message)]
+        pub fn liquidation(&mut self, token: TokenId, user: AccountId) -> Result<()> {
+            let current_amount = self.contributors.get(&(user, token)).unwrap_or_default();
+
+            if current_amount == 0 {
+                return Err(Error::ZeroAmount);
+            }
+
+            self.contributors.remove((user, token));
 
             Ok(())
         }

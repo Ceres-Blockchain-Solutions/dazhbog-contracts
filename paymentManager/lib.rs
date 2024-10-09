@@ -109,7 +109,7 @@ mod paymentManager {
                 .call_v1()
                 .gas_limit(0)
                 .exec_input(
-                    ExecutionInput::new(Selector::new(ink::selector_bytes!("close_position")))
+                    ExecutionInput::new(Selector::new(ink::selector_bytes!("liquidation")))
                         .push_arg(position_id)
                         .push_arg(user),
                 )

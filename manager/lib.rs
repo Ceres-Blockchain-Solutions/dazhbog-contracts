@@ -59,6 +59,13 @@ mod manager {
     }
 
     #[ink(event)]
+    pub struct UserLiquidation {
+        #[ink(topic)]
+        from: Option<AccountId>,
+        position_id: PositionId,
+    }
+
+    #[ink(event)]
     pub struct PositionUpdated {
         #[ink(topic)]
         from: Option<AccountId>,
@@ -279,6 +286,52 @@ mod manager {
         }
 
         #[ink(message)]
+        pub fn liquidation(&mut self, position_id: PositionId, user: AccountId) -> Result<()> {
+            let temp = self.get_position(user, position_id);
+
+            if temp.is_err() {
+                return Err(Error::NotFound);
+            }
+
+            let token = self.get_position(user, position_id).unwrap().token;
+
+            match self
+                .positions
+                .get((user, position_id))
+                .unwrap()
+                .position_type
+            {
+                PositionType::LONG => {
+                    self.long_total = self.long_total.checked_sub(1).unwrap();
+                }
+                PositionType::SHORT => {
+                    self.short_total = self.short_total.checked_sub(1).unwrap();
+                }
+            }
+
+            self.positions.remove((user, position_id));
+
+            let withdraw = build_call::<DefaultEnvironment>()
+                .call(self.vault)
+                .call_v1()
+                .gas_limit(0)
+                .exec_input(
+                    ExecutionInput::new(Selector::new(ink::selector_bytes!("liquidation")))
+                        .push_arg(token)
+                        .push_arg(user),
+                )
+                .returns::<bool>()
+                .invoke();
+
+            self.env().emit_event(UserLiquidation {
+                from: Some(user),
+                position_id,
+            });
+
+            Ok(())
+        }
+
+        #[ink(message)]
         pub fn get_price(&self) -> Balance {
             let price = build_call::<DefaultEnvironment>()
                 .call(self.oracle)
@@ -308,9 +361,9 @@ mod manager {
         }
 
         #[ink(message)]
-        pub fn calculate_funding_rate(&self) -> Result<Balance> {
-            let spot_price: Balance = 100; // TODO: fetch from oracle
-            let contract_price: Balance = 100; // TODO: fetch from oracle
+        pub fn calculate_funding_rate(&self) -> Result<u32> {
+            let spot_price: u32 = 100; // TODO: fetch from oracle
+            let contract_price: u32 = 100; // TODO: fetch from oracle
             let long_short_sub = contract_price
                 .checked_sub(spot_price)
                 .ok_or(Error::Underflow)?;
@@ -337,8 +390,8 @@ mod manager {
                 .ok_or(Error::Underflow)?;
 
             let funding_rate = ff
-                .wrapping_mul(oii)
-                .checked_div(toi)
+                .wrapping_mul(oii as u32)
+                .checked_div(toi as u32)
                 .ok_or(Error::Underflow)?;
 
             Ok(funding_rate)
