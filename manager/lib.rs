@@ -108,7 +108,7 @@ mod manager {
             }
 
             // TODO: fetch from oracle price
-            let entry_price: Balance = 1000; // TODO: fetch from oracle
+            let entry_price: Balance = 2000; // TODO: fetch from oracle
             let creation_time = self.env().block_timestamp().into();
 
             let position_id = self.position_id;

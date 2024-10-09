@@ -4,12 +4,10 @@
 mod oracle {
     #[ink(storage)]
     pub struct Oracle {
-        /// Stores a single `bool` value on the storage.
         price: Balance,
     }
 
     impl Oracle {
-        /// Constructor that initializes the `bool` value to the given `init_value`.
         #[ink(constructor)]
         pub fn new(price: Balance) -> Self {
             Self { price }
@@ -27,7 +25,6 @@ mod oracle {
 
     #[cfg(test)]
     mod tests {
-        /// Imports all the definitions from the outer scope so we can use them here.
         use super::*;
 
         #[ink::test]

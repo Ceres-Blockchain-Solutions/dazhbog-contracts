@@ -1,6 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
 
 pub type PositionId = u128;
+pub type Result<T> = core::result::Result<T, Error>;
 pub type TokenId = u128;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -34,7 +35,7 @@ mod paymentManager {
         amount: Balance,
         position_type: PositionType,
         leverage: u32,
-        entry_price: Balance,
+        position_value: Balance,
         creation_time: u128,
     }
 
@@ -65,8 +66,8 @@ mod paymentManager {
         }
         
         #[ink(message)]
-        pub fn update_position(&self, position_id: PositionId, user: AccountId) {
-            let position = build_call::<DefaultEnvironment>()
+        pub fn update_position(&mut self, position_id: PositionId, user: AccountId) -> Result<()> {
+            let position_temp = build_call::<DefaultEnvironment>()
                 .call(self.manager)
                 .call_v1()
                 .gas_limit(0)
@@ -75,17 +76,17 @@ mod paymentManager {
                         .push_arg(user)
                         .push_arg(position_id),
                 )
-                .returns::<Position>()
+                .returns::<Result<Position>>()
                 .invoke();
 
             let fee = 10; //TODO calculate fee for maintenance position
-            // FIX: Manager to be contract, not AccountId
-            // let position = self.manager.get_position(user, position_id).unwrap();
+
+            let position = position_temp.unwrap();
             
             let check =
-                self.check_liquidation(position.amount, position.entry_price, position.leverage, position.position_type);
+                self.check_liquidation(position.amount, position.position_value, position.leverage, position.position_type);
 
-            if (check) {
+            if check {
                 self.liquidation(position_id, user);
             } else {
                 self.collect_fee(position_id, user);
@@ -95,13 +96,25 @@ mod paymentManager {
                 from: Some(user),
                 position_id,
             });
+
+            Ok(())
         }
         
         #[ink(message)]
-        pub fn liquidation(&self, position_id: PositionId, user: AccountId) {
-            //calculate
-            //check
-            //liquidate if needed
+        pub fn liquidation(&mut self, position_id: PositionId, user: AccountId) -> Result<()> {
+            let position = build_call::<DefaultEnvironment>()
+                .call(self.manager)
+                .call_v1()
+                .gas_limit(0)
+                .exec_input(
+                    ExecutionInput::new(Selector::new(ink::selector_bytes!("close_position")))
+                        .push_arg(position_id)
+                        .push_arg(user),
+                )
+                .returns::<bool>()
+                .invoke();
+
+            Ok(())
         }
 
         #[ink(message)]
@@ -131,27 +144,27 @@ mod paymentManager {
         pub fn check_liquidation(
             &self,
             amount: Balance,
-            entry_price: Balance,
+            position_value: Balance,
             leverage: u32,
             position_type: PositionType,
         ) -> bool {
-            let deposit = amount.wrapping_mul(entry_price as u128);
-            let entry_value = deposit.wrapping_mul(leverage as u128);
+            // let deposit = amount.wrapping_mul(entry_price as u128);
+            let entry_value = position_value.wrapping_mul(leverage as u128);
             //TODO ping oracle for current price
-            let current_price = 1000;
+            let current_price = 1800;
             let real_amount_with_leverage = amount.wrapping_mul(leverage as u128);
             let real_value = real_amount_with_leverage.wrapping_mul(current_price);
 
             match position_type {
                 PositionType::LONG => {
-                    if (deposit == entry_value.checked_sub(real_value).unwrap()) {
+                    if (position_value == entry_value.checked_sub(real_value).unwrap()) {
                         true
                     } else {
                         false
                     }
                 },
                 PositionType::SHORT => {
-                    if (deposit == real_value.checked_sub(entry_value).unwrap()) {
+                    if (position_value == real_value.checked_sub(entry_value).unwrap()) {
                         true
                     } else {
                         false
