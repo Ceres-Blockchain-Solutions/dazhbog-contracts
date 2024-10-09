@@ -110,13 +110,8 @@ mod manager {
                 return Err(Error::NonZeroAmount);
             }
 
-            // TODO: fetch from oracle price
-            let entry_price: Balance = self.get_price(); // TODO: fetch from oracle
-            // let entry_price: Balance = 2000; // TODO: fetch from oracle
-
-
+            let entry_price: Balance = self.get_price();
             let creation_time = self.env().block_timestamp().into();
-
             let position_id = self.position_id;
             self.position_id.checked_add(1).ok_or(Error::Overflow)?;
 
@@ -149,18 +144,18 @@ mod manager {
 
             self.positions.insert((user, position_id), &new_position);
 
-            // let deposit = build_call::<DefaultEnvironment>()
-            //     .call(self.vault)
-            //     .call_v1()
-            //     .gas_limit(0)
-            //     .exec_input(
-            //         ExecutionInput::new(Selector::new(ink::selector_bytes!("add_liquidity")))
-            //             .push_arg(token)
-            //             .push_arg(amount)
-            //             .push_arg(user),
-            //     )
-            //     .returns::<bool>()
-            //     .invoke();
+            let deposit = build_call::<DefaultEnvironment>()
+                .call(self.vault)
+                .call_v1()
+                .gas_limit(0)
+                .exec_input(
+                    ExecutionInput::new(Selector::new(ink::selector_bytes!("add_liquidity")))
+                        .push_arg(token)
+                        .push_arg(amount)
+                        .push_arg(user),
+                )
+                .returns::<bool>()
+                .invoke();
 
             self.env().emit_event(PositionOpened {
                 from: Some(user),
@@ -184,8 +179,7 @@ mod manager {
                 return Err(Error::NotFound)
             }
 
-            // TODO: fetch from oracle price
-            let current_price: Balance = 2000; // TODO: fetch from oracle
+            let current_price: Balance = self.get_price();
             let position = temp.unwrap();
             let amount = position.amount;
 
@@ -216,18 +210,18 @@ mod manager {
 
             self.positions.insert((user, position_id), &new_position);
 
-            // let collect_fee = build_call::<DefaultEnvironment>()
-            //     .call(self.vault)
-            //     .call_v1()
-            //     .gas_limit(0)
-            //     .exec_input(
-            //         ExecutionInput::new(Selector::new(ink::selector_bytes!("update_liquidity")))
-            //             .push_arg(position.token)
-            //             .push_arg(updated_amount)
-            //             .push_arg(user),
-            //     )
-            //     .returns::<bool>()
-            //     .invoke();
+            let collect_fee = build_call::<DefaultEnvironment>()
+                .call(self.vault)
+                .call_v1()
+                .gas_limit(0)
+                .exec_input(
+                    ExecutionInput::new(Selector::new(ink::selector_bytes!("update_liquidity")))
+                        .push_arg(position.token)
+                        .push_arg(updated_amount)
+                        .push_arg(user),
+                )
+                .returns::<bool>()
+                .invoke();
 
             self.env().emit_event(PositionUpdated {
                 from: Some(user),
@@ -246,7 +240,7 @@ mod manager {
                 return Err(Error::NotFound);
             }
 
-            let position = temp.unwrap();
+            let token = self.get_position(user, position_id).unwrap().token;
 
             match self
                 .positions
@@ -264,17 +258,17 @@ mod manager {
 
             self.positions.remove((user, position_id));
 
-            // let withdraw = build_call::<DefaultEnvironment>()
-            //     .call(self.vault)
-            //     .call_v1()
-            //     .gas_limit(0)
-            //     .exec_input(
-            //         ExecutionInput::new(Selector::new(ink::selector_bytes!("remove_liquidity")))
-            //             .push_arg(position.token)
-            //             .push_arg(user),
-            //     )
-            //     .returns::<bool>()
-            //     .invoke();
+            let withdraw = build_call::<DefaultEnvironment>()
+                .call(self.vault)
+                .call_v1()
+                .gas_limit(0)
+                .exec_input(
+                    ExecutionInput::new(Selector::new(ink::selector_bytes!("remove_liquidity")))
+                        .push_arg(token)
+                        .push_arg(user),
+                )
+                .returns::<bool>()
+                .invoke();
 
             self.env().emit_event(PositionClosed {
                 from: Some(user),
