@@ -70,6 +70,7 @@ mod manager {
     pub struct Manager {
         positions: Mapping<(AccountId, PositionId), Position>,
         position_id: PositionId,
+        oracle: AccountId,
         vault: AccountId,
         long_total: Balance,
         short_total: Balance,
@@ -77,15 +78,17 @@ mod manager {
 
     impl Manager {
         #[ink(constructor)]
-        pub fn new(vault_address: AccountId) -> Self {
+        pub fn new(vault_address: AccountId, oracle_address: AccountId) -> Self {
             let positions = Mapping::default();
             let position_id: PositionId = 0;
+            let oracle = oracle_address;
+            let vault = vault_address;
             let long_total = 0;
             let short_total = 0;
-            let vault = vault_address;
             Self {
                 positions,
                 position_id,
+                oracle,
                 vault,
                 long_total,
                 short_total,
@@ -108,7 +111,10 @@ mod manager {
             }
 
             // TODO: fetch from oracle price
-            let entry_price: Balance = 2000; // TODO: fetch from oracle
+            let entry_price: Balance = self.get_price(); // TODO: fetch from oracle
+            // let entry_price: Balance = 2000; // TODO: fetch from oracle
+
+
             let creation_time = self.env().block_timestamp().into();
 
             let position_id = self.position_id;
@@ -276,6 +282,20 @@ mod manager {
             });
 
             Ok(())
+        }
+
+        #[ink(message)]
+        pub fn get_price(&self) -> Balance {
+            let price = build_call::<DefaultEnvironment>()
+                .call(self.oracle)
+                .call_v1()
+                .gas_limit(0)
+                .exec_input(
+                    ExecutionInput::new(Selector::new(ink::selector_bytes!("get_price")))
+                )
+                .returns::<Balance>()
+                .invoke();
+            price
         }
 
         #[ink(message)]

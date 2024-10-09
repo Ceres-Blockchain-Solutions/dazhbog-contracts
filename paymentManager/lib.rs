@@ -56,13 +56,15 @@ mod paymentManager {
     #[ink(storage)]
     pub struct PaymentManager {
         manager: AccountId,
+        oracle: AccountId,
     }
 
     impl PaymentManager {
         #[ink(constructor)]
-        pub fn new(manager_address: AccountId) -> Self {
+        pub fn new(manager_address: AccountId, oracle_address: AccountId) -> Self {
             let manager = manager_address;
-            Self { manager }
+            let oracle = oracle_address;
+            Self { manager, oracle }
         }
         
         #[ink(message)]
@@ -150,8 +152,9 @@ mod paymentManager {
         ) -> bool {
             // let deposit = amount.wrapping_mul(entry_price as u128);
             let entry_value = position_value.wrapping_mul(leverage as u128);
-            //TODO ping oracle for current price
-            let current_price = 1800;
+
+            let current_price = self.get_price();
+
             let real_amount_with_leverage = amount.wrapping_mul(leverage as u128);
             let real_value = real_amount_with_leverage.wrapping_mul(current_price);
 
@@ -171,6 +174,20 @@ mod paymentManager {
                     }
                 },
             }
+        }
+
+        #[ink(message)]
+        pub fn get_price(&self) -> Balance {
+            let price = build_call::<DefaultEnvironment>()
+                .call(self.oracle)
+                .call_v1()
+                .gas_limit(0)
+                .exec_input(
+                    ExecutionInput::new(Selector::new(ink::selector_bytes!("get_price")))
+                )
+                .returns::<Balance>()
+                .invoke();
+            price
         }
     }
 

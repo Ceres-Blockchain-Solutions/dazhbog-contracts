@@ -12,7 +12,8 @@ mod oracle {
         pub fn new(price: Balance) -> Self {
             Self { price }
         }
-
+        
+        #[ink(message)]
         pub fn change_price(&mut self, new_price: Balance) {
             self.price = new_price;
         }
