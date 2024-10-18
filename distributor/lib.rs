@@ -1,50 +1,64 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
 
 #[ink::contract]
-mod distributer {
+mod distributor {
+    use super::*;
+    use ink::env::call::{build_call, ExecutionInput, Selector};
+    use ink::env::DefaultEnvironment;
+    use ink::storage::Mapping;
 
-    /// Defines the storage of your contract.
-    /// Add new fields to the below struct in order
-    /// to add new static storage fields to your contract.
     #[ink(storage)]
-    pub struct Distributer {
-        /// Stores a single `bool` value on the storage.
-        value: bool,
+    pub struct Distributor {
+        liquidity_providers: Mapping<AccountId, Balance>,
+        team: AccountId,
+        erc20: AccountId,
     }
 
-    impl Distributer {
-        /// Constructor that initializes the `bool` value to the given `init_value`.
+    impl Distributor {
         #[ink(constructor)]
-        pub fn new(init_value: bool) -> Self {
-            Self { value: init_value }
+        pub fn new(team_address: AccountId, erc20_contract_address: AccountId) -> Self {
+            let liquidity_providers = Mapping::default();
+            let team = team_address;
+            let erc20 = erc20_contract_address;
+            Self { liquidity_providers, team, erc20 }
         }
 
-        /// Constructor that initializes the `bool` value to `false`.
-        ///
-        /// Constructors can delegate to other constructors.
-        #[ink(constructor)]
-        pub fn default() -> Self {
-            Self::new(Default::default())
-        }
-
-        /// A message that can be called on instantiated contracts.
-        /// This one flips the value of the stored `bool` from `true`
-        /// to `false` and vice versa.
         #[ink(message)]
-        pub fn flip(&mut self) {
-            self.value = !self.value;
+        pub fn withdraw_funds_from_vault(&mut self, vault: AccountId) {
+            let withdraw = build_call::<DefaultEnvironment>()
+                .call(vault)
+                .call_v1()
+                .gas_limit(0)
+                .exec_input(
+                    ExecutionInput::new(Selector::new(ink::selector_bytes!("withdraw")))
+                        .push_arg(token)
+                        .push_arg(user),
+                )
+                .returns::<bool>()
+                .invoke();
         }
 
-        /// Simply returns the current value of our `bool`.
         #[ink(message)]
-        pub fn get(&self) -> bool {
-            self.value
+        pub fn add_funds(&mut self, amount: Balance) {
+            let caller = self.env().caller();
+            self.liquidity_providers.insert(caller, &amount);
+        }
+
+        #[ink(message)]
+        pub fn withdraw_funds(&self) -> bool {
+            let caller = self.env().caller();
+
+            // if (caller == team) {
+            //     let get_total_balance = 
+            //     let withdraw_amount = 
+            // } 
+            //check if it's team
+            //if it's liquidity provider
+            //error if not team or provider
+            true
         }
     }
 
-    /// Unit tests in Rust are normally defined within such a `#[cfg(test)]`
-    /// module and test functions are marked with a `#[test]` attribute.
-    /// The below code is technically just normal Rust code.
     #[cfg(test)]
     mod tests {
         /// Imports all the definitions from the outer scope so we can use them here.
@@ -53,26 +67,20 @@ mod distributer {
         /// We test if the default constructor does its job.
         #[ink::test]
         fn default_works() {
-            let distributer = Distributer::default();
-            assert_eq!(distributer.get(), false);
+            let distributor = Distributor::default();
+            assert_eq!(distributor.get(), false);
         }
 
         /// We test a simple use case of our contract.
         #[ink::test]
         fn it_works() {
-            let mut distributer = Distributer::new(false);
-            assert_eq!(distributer.get(), false);
-            distributer.flip();
-            assert_eq!(distributer.get(), true);
+            let mut distributor = Distributor::new(false);
+            assert_eq!(distributor.get(), false);
+            distributor.flip();
+            assert_eq!(distributor.get(), true);
         }
     }
 
-
-    /// This is how you'd write end-to-end (E2E) or integration tests for ink! contracts.
-    ///
-    /// When running these you need to make sure that you:
-    /// - Compile the tests with the `e2e-tests` feature flag enabled (`--features e2e-tests`)
-    /// - Are running a Substrate node which contains `pallet-contracts` in the background
     #[cfg(all(test, feature = "e2e-tests"))]
     mod e2e_tests {
         /// Imports all the definitions from the outer scope so we can use them here.
