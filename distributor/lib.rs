@@ -30,9 +30,7 @@ mod distributor {
                 .call_v1()
                 .gas_limit(0)
                 .exec_input(
-                    ExecutionInput::new(Selector::new(ink::selector_bytes!("withdraw")))
-                        .push_arg(token)
-                        .push_arg(user),
+                    ExecutionInput::new(Selector::new(ink::selector_bytes!("withdraw_distributor")))
                 )
                 .returns::<bool>()
                 .invoke();

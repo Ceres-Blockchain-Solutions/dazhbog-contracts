@@ -62,7 +62,7 @@ mod vault {
             let contributors = Mapping::default();
             let erc20contract = erc20_contract_address;
             let total_amount_deposit = 0;
-            let distributor = distributor_address
+            let distributor = distributor_address;
             Self {
                 contributors,
                 erc20contract,
@@ -222,7 +222,7 @@ mod vault {
                 .returns::<Balance>()
                 .invoke();
 
-            let withdraw_amount = total_amount_in_vault.checked_sub(self.total_amount_deposit).ok_or(Error::Underflow)?;
+            let withdraw_amount = total_amount_in_vault.checked_sub(self.total_amount_deposit).ok_or(Error::Underflow);
 
             let withdraw = build_call::<DefaultEnvironment>()
                 .call(self.erc20contract)
