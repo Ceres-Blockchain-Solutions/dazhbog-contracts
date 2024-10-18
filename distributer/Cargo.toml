@@ -1,6 +1,5 @@
-workspace = { members = ["erc20", "manager", "amm", "paymentManager", "vault", "oracle", "distributor"] }
 [package]
-name = "dazhbog"
+name = "distributer"
 version = "0.1.0"
 authors = ["[your_name] <[your_email]>"]
 edition = "2021"
