@@ -89,20 +89,20 @@ mod vault {
 
             let deposit_amount = amount.checked_add(self.fee).ok_or(Error::Overflow)?;
 
-            self.total_amount_deposit.checked_add(deposit_amount);
+            self.total_amount_deposit = self.total_amount_deposit.checked_add(deposit_amount).ok_or(Error::Overflow)?;
             
-            // let deposit = build_call::<DefaultEnvironment>()
-            //     .call(self.erc20contract)
-            //     .call_v1()
-            //     .gas_limit(0)
-            //     .exec_input(
-            //         ExecutionInput::new(Selector::new(ink::selector_bytes!("transfer_from")))
-            //             .push_arg(user)
-            //             .push_arg(self.env().account_id())
-            //             .push_arg(deposit_amount)
-            //     )
-            //     .returns::<bool>()
-            //     .invoke();
+            let deposit = build_call::<DefaultEnvironment>()
+                .call(self.erc20contract)
+                .call_v1()
+                .gas_limit(0)
+                .exec_input(
+                    ExecutionInput::new(Selector::new(ink::selector_bytes!("transfer_from")))
+                        .push_arg(user)
+                        .push_arg(self.env().account_id())
+                        .push_arg(deposit_amount)
+                )
+                .returns::<bool>()
+                .invoke();
 
             self.env().emit_event(AddLiquidity {
                 from: Some(user),
@@ -130,26 +130,41 @@ mod vault {
 
             if new_amount > amount {
                 new_amount_final = new_amount.checked_sub(amount).ok_or(Error::Underflow)?;
+                let new_amount_final_with_fee = new_amount_final.checked_add(self.fee).ok_or(Error::Overflow)?;
+
+                self.total_amount_deposit = self.total_amount_deposit.checked_add(new_amount_final_with_fee).ok_or(Error::Overflow)?;
+
+                let deposit = build_call::<DefaultEnvironment>()
+                    .call(self.erc20contract)
+                    .call_v1()
+                    .gas_limit(0)
+                    .exec_input(
+                        ExecutionInput::new(Selector::new(ink::selector_bytes!("transfer_from")))
+                            .push_arg(user)
+                            .push_arg(self.env().account_id())
+                            .push_arg(new_amount_final_with_fee),
+                    )
+                    .returns::<bool>()
+                    .invoke();
             } else {
                 new_amount_final = amount.checked_sub(new_amount).ok_or(Error::Underflow)?;
+                self.total_amount_deposit = self.total_amount_deposit.checked_sub(new_amount_final).ok_or(Error::Underflow)?;
+                self.total_amount_deposit = self.total_amount_deposit.checked_add(self.fee).ok_or(Error::Overflow)?;
+
+                let withdraw = build_call::<DefaultEnvironment>()
+                    .call(self.erc20contract)
+                    .call_v1()
+                    .gas_limit(0)
+                    .exec_input(
+                        ExecutionInput::new(Selector::new(ink::selector_bytes!("transfer")))
+                            .push_arg(user)
+                            .push_arg(new_amount_final.checked_sub(self.fee).ok_or(Error::Underflow)?),
+                    )
+                    .returns::<bool>()
+                    .invoke();
             }
 
             self.contributors.insert((user, token), &new_amount);
-
-            self.total_amount_deposit.checked_add(new_amount_final);
-
-            // let deposit = build_call::<DefaultEnvironment>()
-            //     .call(self.erc20contract)
-            //     .call_v1()
-            //     .gas_limit(0)
-            //     .exec_input(
-            //         ExecutionInput::new(Selector::new(ink::selector_bytes!("transfer_from")))
-            //             .push_arg(user)
-            //             .push_arg(self.env().account_id())
-            //             .push_arg(new_amount_final),
-            //     )
-            //     .returns::<bool>()
-            //     .invoke();
 
             self.env().emit_event(UpdateLiquidity {
                 from: Some(user),
@@ -172,19 +187,19 @@ mod vault {
 
             self.contributors.remove((user, token));
 
-            self.total_amount_deposit.checked_sub(current_amount);
+            self.total_amount_deposit = self.total_amount_deposit.checked_sub(remove_amount).ok_or(Error::Underflow)?;
 
-            // let withdraw = build_call::<DefaultEnvironment>()
-            //     .call(self.erc20contract)
-            //     .call_v1()
-            //     .gas_limit(0)
-            //     .exec_input(
-            //         ExecutionInput::new(Selector::new(ink::selector_bytes!("transfer")))
-            //             .push_arg(user)
-            //             .push_arg(remove_amount),
-            //     )
-            //     .returns::<bool>()
-            //     .invoke();
+            let withdraw = build_call::<DefaultEnvironment>()
+                .call(self.erc20contract)
+                .call_v1()
+                .gas_limit(0)
+                .exec_input(
+                    ExecutionInput::new(Selector::new(ink::selector_bytes!("transfer")))
+                        .push_arg(user)
+                        .push_arg(remove_amount),
+                )
+                .returns::<bool>()
+                .invoke();
 
             self.env().emit_event(WithdrawLiquidity {
                 from: Some(user),
@@ -209,9 +224,10 @@ mod vault {
         }
 
         #[ink(message)]
-        pub fn withdraw_distributor(&mut self) {
+        pub fn withdraw_distributor(&mut self) -> Result<()>{
             //calculate remove amount
-            let total_amount_in_vault = build_call::<DefaultEnvironment>()
+            //contract call returns wrong amount or zero amount
+            let total_amount_in_vault: Balance = build_call::<DefaultEnvironment>()
                 .call(self.erc20contract)
                 .call_v1()
                 .gas_limit(0)
@@ -222,7 +238,7 @@ mod vault {
                 .returns::<Balance>()
                 .invoke();
 
-            let withdraw_amount = total_amount_in_vault.checked_sub(self.total_amount_deposit).ok_or(Error::Underflow);
+            self.total_amount_deposit = self.total_amount_deposit.checked_sub(withdraw_amount).ok_or(Error::Underflow)?;
 
             let withdraw = build_call::<DefaultEnvironment>()
                 .call(self.erc20contract)
@@ -231,15 +247,23 @@ mod vault {
                 .exec_input(
                     ExecutionInput::new(Selector::new(ink::selector_bytes!("transfer")))
                         .push_arg(self.distributor)
-                        .push_arg(withdraw_amount),
+                        //change self.fee na pravu vrednost
+                        .push_arg(total_amount_in_vault.checked_sub(self.total_amount_deposit).ok_or(Error::Underflow)?),
                 )
                 .returns::<bool>()
                 .invoke();
+
+            Ok(())
         }
 
         #[ink(message)]
         pub fn get_contributor_balance(&self, account: AccountId, token: TokenId) -> Balance {
             self.contributors.get(&(account, token)).unwrap_or_default()
+        }
+
+        #[ink(message)]
+        pub fn get_total_amount_deposit(&self) -> Balance {
+            self.total_amount_deposit
         }
     }
 

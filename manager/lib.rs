@@ -117,27 +117,27 @@ mod manager {
                 return Err(Error::NonZeroAmount);
             }
 
-            let entry_price: Balance = self.get_price();
+            let entry_price = self.get_price();
             let creation_time = self.env().block_timestamp().into();
             let position_id = self.position_id;
-            self.position_id.checked_add(1).ok_or(Error::Overflow)?;
+            self.position_id = self.position_id.checked_add(1).ok_or(Error::Overflow)?;
 
             match position_type {
                 PositionType::LONG => {
                     self.long_total = self
                         .long_total
-                        .checked_add(entry_price.wrapping_mul(amount))
+                        .checked_add(1)
                         .ok_or(Error::Overflow)?;
                 }
                 PositionType::SHORT => {
                     self.short_total = self
                         .short_total
-                        .checked_add(entry_price.wrapping_mul(amount))
+                        .checked_add(1)
                         .ok_or(Error::Overflow)?;
                 }
             }
 
-            let position_value = entry_price.wrapping_mul(amount);
+            let position_value = amount.wrapping_mul(entry_price as Balance);
 
             let new_position: Position = Position {
                 state: true,
@@ -186,7 +186,7 @@ mod manager {
                 return Err(Error::NotFound)
             }
 
-            let current_price: Balance = self.get_price();
+            let current_price = self.get_price();
             let position = temp.unwrap();
             let amount = position.amount;
 
@@ -195,14 +195,14 @@ mod manager {
             }
 
             let mut new_amount = 0;
-            let mut new_position_value = 0;
+            let mut new_position_value: Balance = 0;
 
             if updated_amount > amount {
                 new_amount = updated_amount.checked_sub(amount).ok_or(Error::Underflow)?;
-                new_position_value = position.position_value.checked_add(current_price.wrapping_mul(new_amount)).ok_or(Error::Overflow)?;
+                new_position_value = position.position_value.checked_add(current_price.wrapping_mul(new_amount as u32) as u128).ok_or(Error::Overflow)?;
             } else {
                 new_amount = amount.checked_sub(updated_amount).ok_or(Error::Underflow)?;
-                new_position_value = position.position_value.checked_sub(current_price.wrapping_mul(new_amount)).ok_or(Error::Underflow)?;
+                new_position_value = position.position_value.checked_sub(current_price.wrapping_mul(new_amount  as u32) as u128).ok_or(Error::Underflow)?;
             }
 
             let new_position: Position = Position {
@@ -332,7 +332,7 @@ mod manager {
         }
 
         #[ink(message)]
-        pub fn get_price(&self) -> Balance {
+        pub fn get_price(&self) -> u32 {
             let price = build_call::<DefaultEnvironment>()
                 .call(self.oracle)
                 .call_v1()
@@ -340,7 +340,7 @@ mod manager {
                 .exec_input(
                     ExecutionInput::new(Selector::new(ink::selector_bytes!("get_price")))
                 )
-                .returns::<Balance>()
+                .returns::<u32>()
                 .invoke();
             price
         }

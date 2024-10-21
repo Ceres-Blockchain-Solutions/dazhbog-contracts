@@ -8,6 +8,7 @@ pub type TokenId = u128;
 #[ink::scale_derive(Encode, Decode, TypeInfo)]
 pub enum Error {
     Overflow,
+    Underflow,
     NotFound,
 }
 
@@ -81,9 +82,11 @@ mod paymentManager {
                 .returns::<Result<Position>>()
                 .invoke();
 
-            let fee = 10; //TODO calculate fee for maintenance position
-
+            //TODO calculate fee for maintenance position
+            let fee: Balance = 1000; 
+            
             let position = position_temp.unwrap();
+            let updated_amount = position.amount.checked_sub(fee).ok_or(Error::Underflow)?;
             
             let check =
                 self.check_liquidation(position.amount, position.position_value, position.leverage, position.position_type);
@@ -91,7 +94,7 @@ mod paymentManager {
             if check {
                 self.liquidation(position_id, user);
             } else {
-                self.collect_fee(position_id, user);
+                self.collect_fee(updated_amount, position_id, user);
             }
 
             self.env().emit_event(PositionUpdated {
@@ -120,26 +123,27 @@ mod paymentManager {
         }
 
         #[ink(message)]
-        pub fn collect_fee(&self, position_id: PositionId, user: AccountId) {
-            // // call manager to update position
-            // let update_position = build_call::<DefaultEnvironment>()
-            //     .call(self.manager)
-            //     .call_v1()
-            //     .gas_limit(0)
-            //     .exec_input(
-            //         ExecutionInput::new(Selector::new(ink::selector_bytes!("update_position")))
-            //             .push_arg(fee)
-            //             .push_arg(position_id),
-            //     )
-            //     .returns::<bool>()
-            //     .invoke();
+        pub fn collect_fee(&mut self, updated_amount: Balance, position_id: PositionId, user: AccountId) -> Result<()> {
+            // call manager to update position
+            let update_position = build_call::<DefaultEnvironment>()
+                .call(self.manager)
+                .call_v1()
+                .gas_limit(0)
+                .exec_input(
+                    ExecutionInput::new(Selector::new(ink::selector_bytes!("update_position")))
+                        .push_arg(updated_amount)
+                        .push_arg(position_id)
+                        .push_arg(user),
+                )
+                .returns::<bool>()
+                .invoke();
 
             self.env().emit_event(MaintenanceFeeCollected {
                 from: Some(user),
                 position_id,
             });
 
-            // Ok(())
+            Ok(())
         }
         
         #[ink(message)]
@@ -156,18 +160,18 @@ mod paymentManager {
             let current_price = self.get_price();
 
             let real_amount_with_leverage = amount.wrapping_mul(leverage as u128);
-            let real_value = real_amount_with_leverage.wrapping_mul(current_price);
+            let real_value = real_amount_with_leverage.wrapping_mul(current_price as u128);
 
             match position_type {
                 PositionType::LONG => {
-                    if (position_value == entry_value.checked_sub(real_value).unwrap()) {
+                    if (position_value <= entry_value.checked_sub(real_value).unwrap()) {
                         true
                     } else {
                         false
                     }
                 },
                 PositionType::SHORT => {
-                    if (position_value == real_value.checked_sub(entry_value).unwrap()) {
+                    if (position_value <= real_value.checked_sub(entry_value).unwrap()) {
                         true
                     } else {
                         false
@@ -177,7 +181,7 @@ mod paymentManager {
         }
 
         #[ink(message)]
-        pub fn get_price(&self) -> Balance {
+        pub fn get_price(&self) -> u32 {
             let price = build_call::<DefaultEnvironment>()
                 .call(self.oracle)
                 .call_v1()
@@ -185,7 +189,7 @@ mod paymentManager {
                 .exec_input(
                     ExecutionInput::new(Selector::new(ink::selector_bytes!("get_price")))
                 )
-                .returns::<Balance>()
+                .returns::<u32>()
                 .invoke();
             price
         }
