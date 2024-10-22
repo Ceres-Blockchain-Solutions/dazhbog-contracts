@@ -58,14 +58,15 @@ mod paymentManager {
     pub struct PaymentManager {
         manager: AccountId,
         oracle: AccountId,
+        fee: Balance,
     }
 
     impl PaymentManager {
         #[ink(constructor)]
-        pub fn new(manager_address: AccountId, oracle_address: AccountId) -> Self {
+        pub fn new(manager_address: AccountId, oracle_address: AccountId, fee: Balance) -> Self {
             let manager = manager_address;
             let oracle = oracle_address;
-            Self { manager, oracle }
+            Self { manager, oracle, fee }
         }
         
         #[ink(message)]
@@ -82,13 +83,10 @@ mod paymentManager {
                 .returns::<Result<Position>>()
                 .invoke();
 
-            //TODO calculate fee for maintenance position
-            let fee: Balance = 1000; 
-            
             let position = position_temp.unwrap();
-            let updated_amount = position.amount.checked_sub(fee).ok_or(Error::Underflow)?;
+            let updated_amount = position.amount.checked_sub(self.fee).ok_or(Error::Underflow)?;
             
-            let check =
+            let check: bool =
                 self.check_liquidation(position.amount, position.position_value, position.leverage, position.position_type);
 
             if check {
@@ -154,7 +152,6 @@ mod paymentManager {
             leverage: u32,
             position_type: PositionType,
         ) -> bool {
-            // let deposit = amount.wrapping_mul(entry_price as u128);
             let entry_value = position_value.wrapping_mul(leverage as u128);
 
             let current_price = self.get_price();
