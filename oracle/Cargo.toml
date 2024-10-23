@@ -1,8 +1,7 @@
-workspace = { members = ["erc20", "manager", "amm", "paymentManager", "vault", "oracle", "distributor"] }
 [package]
-name = "dazhbog"
+name = "oracle"
 version = "0.1.0"
-authors = ["[your_name] <[your_email]>"]
+authors = ["[Ceres Blockchain Solutions] <[rastko@ceresblockchain.solutions]>"]
 edition = "2021"
 
 [dependencies]
